@@ -17,6 +17,19 @@ function newer(a, b) {
   return false;
 }
 
+// Native modules (e.g. Discord's voice encryption) live in
+// resources/app.asar.unpacked, and Electron looks for them next to whichever
+// app file is running. A same-shell update has identical natives, so copy the
+// installed ones next to the downloaded app file.
+function copyNatives(dest) {
+  const src = path.join(process.resourcesPath || '', 'app.asar.unpacked');
+  try {
+    if (!process.resourcesPath || !fs.existsSync(src) || fs.existsSync(dest)) return false;
+    fs.cpSync(src, dest, { recursive: true });
+    return true;
+  } catch (e) { console.error('[updater] copying native modules failed:', e.message); return false; }
+}
+
 function createUpdater({ app, settings, send, current, repo, versionsDir, quit, shell }) {
   const SHELL = shell || process.versions.electron;
   const api = (process.env.WL_UPDATE_API || 'https://api.github.com').replace(/\/$/, '');
@@ -97,6 +110,7 @@ function createUpdater({ app, settings, send, current, repo, versionsDir, quit, 
       const file = path.join(vdir, 'app.asar');
       const sha = await download(asset(m.app.name).browser_download_url, file, m.app.size, onPct);
       if (sha !== m.app.sha256) { fs.rmSync(vdir, { recursive: true, force: true }); throw new Error('The download was damaged. It will retry later.'); }
+      copyNatives(path.join(vdir, 'app.asar.unpacked'));
       fs.writeFileSync(path.join(vdir, 'info.json'), JSON.stringify({ version: m.version, shell: m.shell, sha256: sha, notes: state.notes }, null, 2));
     } else if (m.setup && asset(m.setup.name)) {
       state.kind = 'installer'; state.phase = 'downloading'; state.pct = 0; emit();
@@ -158,4 +172,4 @@ function createUpdater({ app, settings, send, current, repo, versionsDir, quit, 
   return { run, apply, status, schedule };
 }
 
-module.exports = { createUpdater, newer };
+module.exports = { createUpdater, newer, copyNatives };

@@ -10,7 +10,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { JsonStore } = require('./store');
 const { enableAdblock, disableAdblock } = require('./adblock');
-const { createUpdater } = require('./updater');
+const { createUpdater, copyNatives } = require('./updater');
 const { DiscordBot, appIdFromToken } = require('./discord');
 
 if (process.env.WL_USERDATA) app.setPath('userData', process.env.WL_USERDATA);
@@ -19,6 +19,7 @@ const BOOT = global.__wlBoot || null;
 const VERSION = BOOT ? BOOT.version : app.getVersion();
 
 const ROOT = path.join(__dirname, '..', '..');
+if (BOOT && BOOT.fromUpdate && copyNatives(BOOT.root + '.unpacked')) console.log('[updater] restored native modules next to', BOOT.root);
 const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const ICON = path.join(ROOT, 'build', 'icon.png');
 const YTM_URL = 'https://music.youtube.com/';

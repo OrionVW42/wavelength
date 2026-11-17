@@ -60,9 +60,16 @@ server.listen(0, '127.0.0.1', async () => {
   check('download saved and verified', gotSha === crypto.createHash('sha256').update(asar).digest('hex'));
   check('title bar shows "Update ready"', a.includes('pill visible'));
 
-  // 2) next start runs it
+  const unpacked = path.join(userData, 'versions', '9.9.9', 'app.asar.unpacked');
+  check('the download brings the native voice files along', fs.existsSync(unpacked));
+  // Simulate a copy updated by 1.3.1, which did not copy them: remove them.
+  fs.rmSync(unpacked, { recursive: true, force: true });
+
+  // 2) next start runs it (and repairs the missing native files itself)
   const b = lines(await run('updater-b.js'));
   check('next start runs v9.9.9 from the versions folder', b.includes('version 9.9.9 fromUpdate true'), b.join(' | '));
+  check('a copy missing them repairs itself on start', fs.existsSync(unpacked));
+  check('the updated copy can load Discord\'s native voice module', b.some((l) => /^natives ok/.test(l)), b.find((l) => /^natives/.test(l)));
   const st = JSON.parse(fs.readFileSync(path.join(userData, 'versions', 'state.json'), 'utf8'));
   check('the new version confirmed it started fine', (st.good || []).includes('9.9.9') && !st.trying, JSON.stringify(st));
 
