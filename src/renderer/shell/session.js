@@ -73,7 +73,7 @@
         members: this.members.map((m) => ({ name: m.name, color: m.color })),
         next: this.queue[0] ? { title: this.queue[0].title, artist: this.queue[0].artist } : null,
         current: this.current ? { addedBy: this.current.addedBy, title: this.current.title, artist: this.current.artist } : null,
-        upNext: this.queue.slice(0, 25).map((t) => ({ title: t.title, artist: t.artist, by: t.addedBy ? t.addedBy.name : null })),
+        upNext: this.queue.slice(0, 25).map((t) => ({ uid: t.uid, videoId: t.videoId, title: t.title, artist: t.artist, duration: t.duration, by: t.addedBy ? t.addedBy.name : null })),
         queueLength: this.queue.length,
       };
     }
@@ -213,9 +213,9 @@
           const items = (a.items || []).filter((t) => t && /^[\w-]{11}$/.test(t.videoId))
             .map((t) => ({ uid: uid(), ...cleanItem(t), addedBy: by }));
           if (!items.length) return;
-          if (a.where === 'next') this.queue.unshift(...items); else this.queue.push(...items);
+          if (a.where === 'next' || a.where === 'now') this.queue.unshift(...items); else this.queue.push(...items);
           const idle = !this.player.videoId || this.heldEnd || (!this.player.playing && !this.current);
-          if (idle) this.advance(0); else this.changed();
+          if (idle || a.where === 'now') this.advance(0); else this.changed();
           if (by.id !== this.me.id && this.role === 'host') this.emit('toast', { msg: `${by.name} added ${items.length === 1 ? items[0].title : items.length + ' songs'}` });
           return;
         }

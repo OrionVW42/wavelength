@@ -77,10 +77,16 @@ bot to your server with the **Add to server** button.
 
 - In a voice channel, type `/join`. The bot plays **whatever Wavelength is playing**
   (your own music, a room you're hosting, or a room you joined), straight from the
-  player, so Discord hears the same ad-free stream at the same moment.
-- `/play` adds songs to Up Next, credited to whoever asked. `/search` lets you pick
-  from results. `/np` posts a live now-playing card with ⏮ ⏯ ⏭ buttons.
-  `/queue`, `/skip`, `/previous`, `/pause`, `/resume`, `/volume`.
+  player, so Discord hears the same ad-free stream. Audio is captured on its own
+  thread and buffered, so it stays smooth even when your PC is busy.
+- When it joins, the bot posts a **live player in the voice channel's chat**: cover art,
+  progress, who added what, and the whole Up Next, with ⏮ ⏯ ⏭ 🔀, **Add song**, volume,
+  and a menu to play any queued song now, move it next, or remove it.
+- The bot's profile shows what's playing ("Listening to …").
+- `/play` suggests songs as you type; pick one, then **Play now**, **Play next** or
+  **Add to end**. `/search` shows a list to pick from. `/player` posts the live player
+  anywhere. Also `/queue`, `/remove`, `/shuffle`, `/clear`, `/seek`, `/skip`,
+  `/previous`, `/pause`, `/resume`, `/volume`, `/help`.
 - `/room start` hosts a listening room, `/room join code:K7Q-M2X` joins one, and
   `/room info` shows the code so friends can join from the Wavelength app.
 - The bot runs inside Wavelength, so it's online while Wavelength is open.

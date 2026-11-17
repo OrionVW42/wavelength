@@ -213,7 +213,7 @@
   function ensureTap() {
     const v = video(); if (!v) return null;
     if (tap && tap.el === v) return tap;
-    if (tap) { try { tap.ctx.close(); } catch { /* closed */ } tap = null; }
+    if (tap) { clearInterval(tap.timer); try { tap.ctx.close(); } catch { /* closed */ } tap = null; }
     const ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
     const src = ctx.createMediaElementSource(v);
     // The element's own volume would also scale what Discord gets (a host at
@@ -249,33 +249,84 @@
       if (changed) applyLocal();
     });
     src.connect(local); local.connect(ctx.destination); // keep playing through the speakers
-    const sp = ctx.createScriptProcessor(4096, 2, 2);
-    const sink = ctx.createGain(); sink.gain.value = 0; // processor must reach the output to run
-    src.connect(sp); sp.connect(sink); sink.connect(ctx.destination);
-    const t = { el: v, ctx, on: false, applyLocal: () => applyLocal(), info: () => ({ real: Math.round(proto.get.call(v) * 1000) / 1000, wanted: Math.round(wanted * 1000) / 1000, local: Math.round(local.gain.value * 1000) / 1000, muted: wantedMuted, playLocal: cfg.playLocal !== false, ctx: ctx.state, sameEl: video() === v }) };
-    sp.onaudioprocess = (e) => {
-      if (!t.on) return;
-      const ib = e.inputBuffer;
-      const L = ib.getChannelData(0), R = ib.numberOfChannels > 1 ? ib.getChannelData(1) : L;
-      // Full level for Discord: the element normally plays at 1.0 (see above);
-      // if it's briefly lower, undo that here. Muted (ads) stays silent. The
-      // bot has its own volume control.
-      const real = proto.get.call(t.el);
-      const g = isAd() || protoMuted.get.call(t.el) ? 0 : real > 0.0005 ? 1 / real : 0;
-      const out = new Int16Array(L.length * 2);
-      for (let i = 0, j = 0; i < L.length; i++, j += 2) {
-        let l = L[i] * g, r = R[i] * g;
-        l = l < -1 ? -1 : l > 1 ? 1 : l;
-        r = r < -1 ? -1 : r > 1 ? 1 : r;
-        out[j] = l * 32767; out[j + 1] = r * 32767;
+    const sink = ctx.createGain(); sink.gain.value = 0; // the capture node must reach the output to run
+    sink.connect(ctx.destination);
+    const t = { el: v, ctx, on: false, mode: 'starting', sent: 0, applyLocal: () => applyLocal(),
+      info: () => ({ real: Math.round(proto.get.call(v) * 1000) / 1000, wanted: Math.round(wanted * 1000) / 1000, local: Math.round(local.gain.value * 1000) / 1000, muted: wantedMuted, playLocal: cfg.playLocal !== false, ctx: ctx.state, sameEl: video() === v, mode: t.mode }) };
+    // Full level for Discord: the element normally plays at 1.0 (see above);
+    // if it's briefly lower, undo that here. Muted (ads) stays silent. The bot
+    // has its own volume control.
+    const gain = () => (isAd() || protoMuted.get.call(t.el) ? 0 : (() => { const real = proto.get.call(t.el); return real > 0.0005 ? 1 / real : 0; })());
+    const out = (data) => { if (t.on && tap === t) { t.sent++; send('pcm', data); } };
+    // Preferred: capture on the audio thread. The page's main thread can be
+    // busy (song loads, scrolling, YouTube's own work); with the old
+    // ScriptProcessor that dropped chunks of audio and Discord heard skips.
+    // A worklet never misses a block: if the page is busy its messages just
+    // wait, and the bot's buffer smooths the delay out.
+    const WORKLET = `registerProcessor('wl-tap', class extends AudioWorkletProcessor {
+      constructor() { super(); this.g = 1; this.on = false; this.buf = new Int16Array(4096); this.n = 0;
+        this.port.onmessage = (e) => { if ('g' in e.data) this.g = e.data.g; if ('on' in e.data) this.on = e.data.on; }; }
+      process(inputs) {
+        if (!this.on) { this.n = 0; return true; }
+        const inp = inputs[0], frames = 128, g = this.g;
+        const L = inp && inp[0], R = (inp && inp[1]) || L;
+        for (let i = 0; i < frames; i++) {
+          let l = L ? L[i] * g : 0, r = R ? R[i] * g : 0;
+          l = l < -1 ? -1 : l > 1 ? 1 : l; r = r < -1 ? -1 : r > 1 ? 1 : r;
+          this.buf[this.n++] = l * 32767; this.buf[this.n++] = r * 32767;
+          if (this.n === this.buf.length) { this.port.postMessage(this.buf, [this.buf.buffer]); this.buf = new Int16Array(4096); this.n = 0; }
+        }
+        return true;
       }
-      send('pcm', out);
+    });`;
+    let node = null, lastG = -1, lastOn = null;
+    t.sync = () => {
+      if (!node) return;
+      const g = gain();
+      if (g !== lastG) { lastG = g; node.port.postMessage({ g }); }
+      if (t.on !== lastOn) { lastOn = t.on; node.port.postMessage({ on: t.on }); }
     };
+    const fallback = (why) => {
+      // Older approach with a 4x larger block (341 ms), which rides out most
+      // main-thread stalls.
+      t.mode = 'script:' + String(why || '').slice(0, 60);
+      const sp = ctx.createScriptProcessor(16384, 2, 2);
+      src.connect(sp); sp.connect(sink);
+      sp.onaudioprocess = (e) => {
+        if (!t.on) return;
+        const ib = e.inputBuffer;
+        const L = ib.getChannelData(0), R = ib.numberOfChannels > 1 ? ib.getChannelData(1) : L;
+        const g = gain();
+        const o = new Int16Array(L.length * 2);
+        for (let i = 0, j = 0; i < L.length; i++, j += 2) {
+          let l = L[i] * g, r = R[i] * g;
+          l = l < -1 ? -1 : l > 1 ? 1 : l;
+          r = r < -1 ? -1 : r > 1 ? 1 : r;
+          o[j] = l * 32767; o[j + 1] = r * 32767;
+        }
+        out(o);
+      };
+    };
+    (async () => {
+      try {
+        const url = URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' }));
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+        node = new AudioWorkletNode(ctx, 'wl-tap', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
+        node.port.onmessage = (e) => out(e.data);
+        src.connect(node); node.connect(sink);
+        t.mode = 'worklet';
+        t.sync();
+      } catch (e) { fallback(e && e.message); }
+    })();
+    // Ads / volume changes reach the worklet within 50 ms.
+    t.timer = setInterval(() => t.sync(), 50);
+    v.addEventListener('volumechange', () => t.sync());
     applyLocal();
     tap = t;
     return t;
   }
-  setInterval(() => { if (tap && tap.on && video() && video() !== tap.el) { ensureTap().on = true; } }, 2000);
+  setInterval(() => { if (tap && tap.on && video() && video() !== tap.el) { ensureTap().on = true; tap.sync && tap.sync(); } }, 2000);
 
   // ------------------------------------------------------- data saver
   // Album art instead of the video, and the stream held at 144p (the lowest
@@ -390,6 +441,7 @@
       if (!on && !tap) return true;
       const t = ensureTap(); if (!t) return false;
       t.on = !!on;
+      if (t.sync) t.sync();
       t.applyLocal();
       if (t.ctx.state === 'suspended') t.ctx.resume();
       return true;

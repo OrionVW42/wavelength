@@ -62,7 +62,7 @@
 
       <h2>Updates</h2>
       <div class="s-card">
-        <div class="s-row"><div><div class="lbl">Wavelength <span id="st-ver">${esc(s.version || '')}</span></div><div class="desc" id="upd-desc">Checkingâ€¦</div></div>
+        <div class="s-row"><div><div class="lbl">Wavelength <span id="st-ver">${esc(s.version || '')}</span></div><div class="desc" id="upd-desc">Checking…</div></div>
           <div class="upd-box"><div class="upd-bar" id="upd-bar" hidden><i></i></div><button class="btn small" id="upd-btn">Check now</button></div></div>
         <div class="s-row"><div><div class="lbl">Update automatically</div><div class="desc">Downloads new versions quietly in the background (usually just a few MB). Nothing changes until you restart.</div></div>
           <label class="switch"><input type="checkbox" id="st-auto" ${s.autoUpdate !== false ? 'checked' : ''}><span></span></label></div>
@@ -80,7 +80,7 @@
       <div class="s-card">
         <div class="s-row"><div><div class="lbl">Data saver</div><div class="desc">Shows album art instead of music videos and streams at the lowest video quality, so a song uses a fraction of the data. Click <b>Show video</b> on the player or press ${esc(pretty(hk.toggleVideo))} to switch.</div></div>
           <label class="switch"><input type="checkbox" id="st-saver" ${s.dataSaver ? 'checked' : ''}><span></span></label></div>
-        <div class="s-row"><div><div class="lbl">Block ads</div><div class="desc">Removes YouTube Music's audio/video ads, promo banners and trackers, and auto-answers â€œAre you still listening?â€.</div></div>
+        <div class="s-row"><div><div class="lbl">Block ads</div><div class="desc">Removes YouTube Music's audio/video ads, promo banners and trackers, and auto-answers “Are you still listening?”.</div></div>
           <label class="switch"><input type="checkbox" id="st-adblock" ${s.adblock ? 'checked' : ''}><span></span></label></div>
       </div>
 
@@ -100,19 +100,19 @@
           <button class="btn small" id="hk-reset-all">Reset all</button></div>
         ${HOTKEY_GROUPS.map(([g, list]) => `<div class="kbd-group">${g}</div>${list.map(hkRow).join('')}`).join('')}
         <div class="kbd-group">Keyboard</div>
-        <div class="s-row"><div><div class="lbl">Keyboard media keys</div><div class="desc">Use your keyboard's â¯ â­ â® keys. Restart Wavelength after changing.${mediaTaken.length ? ' <span style="color:var(--warn)">Another app is holding some media keys right now.</span>' : ''}</div></div>
+        <div class="s-row"><div><div class="lbl">Keyboard media keys</div><div class="desc">Use your keyboard's ⏯ ⏭ ⏮ keys. Restart Wavelength after changing.${mediaTaken.length ? ' <span style="color:var(--warn)">Another app is holding some media keys right now.</span>' : ''}</div></div>
           <label class="switch"><input type="checkbox" id="st-media" ${s.mediaKeys ? 'checked' : ''}><span></span></label></div>
-        <div class="s-row"><div><div class="lbl">Inside Wavelength</div><div class="desc"><kbd>/</kbd> or <kbd>Ctrl</kbd> + <kbd>F</kbd> search Â· <kbd>Esc</kbd> close search or settings Â· right-click a song to add it to Up Next</div></div></div>
+        <div class="s-row"><div><div class="lbl">Inside Wavelength</div><div class="desc"><kbd>/</kbd> or <kbd>Ctrl</kbd> + <kbd>F</kbd> search · <kbd>Esc</kbd> close search or settings · right-click a song to add it to Up Next</div></div></div>
       </div>
 
       <h2>Discord bot</h2>
       <div class="s-card">
         <div class="s-row"><div><div class="lbl">Discord bot</div><div class="desc" id="dc-status">Off</div></div>
           <label class="switch"><input type="checkbox" id="st-dc-on" ${s.discordEnabled ? 'checked' : ''}><span></span></label></div>
-        <div class="s-row"><div><div class="lbl">Bot token</div><div class="desc">From the Discord Developer Portal â†’ your app â†’ Bot â†’ Reset Token. Stays on this PC only.</div></div>
+        <div class="s-row"><div><div class="lbl">Bot token</div><div class="desc">From the Discord Developer Portal → your app → Bot → Reset Token. Stays on this PC only.</div></div>
           <div class="hk-right"><input class="input" id="st-dc-token" type="password" style="width:240px" placeholder="paste token" value="${esc(s.discordToken || '')}" spellcheck="false" autocomplete="off">
           <button class="btn small" id="st-dc-show" type="button">Show</button></div></div>
-        <div class="s-row"><div><div class="lbl">Server ID</div><div class="desc">Optional. Commands show up instantly in this server (right-click the server â†’ Copy Server ID, with Developer Mode on).</div></div>
+        <div class="s-row"><div><div class="lbl">Server ID</div><div class="desc">Optional. Commands show up instantly in this server (right-click the server → Copy Server ID, with Developer Mode on).</div></div>
           <input class="input" id="st-dc-guild" style="width:240px" placeholder="all servers" value="${esc(s.discordGuildId || '')}" spellcheck="false"></div>
         <div class="s-row"><div><div class="lbl">Bot volume</div><div class="desc">How loud Wavelength plays in the voice channel for everyone. Your own volume and mute don't change it.</div></div>
           <input class="range" type="range" id="st-dc-vol" min="0" max="150" step="5" value="${s.discordVolume ?? 50}"></div>
@@ -120,7 +120,7 @@
           <label class="switch"><input type="checkbox" id="st-dc-local" ${s.discordPlayLocal !== false ? 'checked' : ''}><span></span></label></div>
         <div class="s-row"><div><div class="lbl">Add the bot to a server</div><div class="desc">Opens Discord's invite page for your bot.</div></div>
           <button class="btn small" id="st-dc-invite" type="button">Add to server</button></div>
-        <div class="s-row"><div class="desc">In a voice channel type <kbd>/join</kbd>. Then <kbd>/play</kbd> adds songs, <kbd>/np</kbd> shows controls, <kbd>/queue</kbd>, <kbd>/skip</kbd>, <kbd>/pause</kbd>, <kbd>/resume</kbd>, <kbd>/volume</kbd>, and <kbd>/room start</kbd> Â· <kbd>/room join</kbd> Â· <kbd>/room info</kbd> for listening rooms. Discord hears whatever Wavelength is playing, including a room you're in.</div></div>
+        <div class="s-row"><div class="desc">In a voice channel type <kbd>/join</kbd>. Then <kbd>/play</kbd> adds songs, <kbd>/np</kbd> shows controls, <kbd>/queue</kbd>, <kbd>/skip</kbd>, <kbd>/pause</kbd>, <kbd>/resume</kbd>, <kbd>/volume</kbd>, and <kbd>/room start</kbd> · <kbd>/room join</kbd> · <kbd>/room info</kbd> for listening rooms. Discord hears whatever Wavelength is playing, including a room you're in.</div></div>
       </div>
 
       <h2>App</h2>
@@ -140,7 +140,7 @@
     </div>`;
 
     const $ = (q) => root.querySelector(q);
-    api.info().then((i) => { $('#st-about').textContent = `Wavelength ${i.version} Â· Electron ${i.electron}${i.fromUpdate ? ' Â· updated in place' : ''}`; });
+    api.info().then((i) => { $('#st-about').textContent = `Wavelength ${i.version} · Electron ${i.electron}${i.fromUpdate ? ' · updated in place' : ''}`; });
 
     // ---------------------------------------------------- updates
     function renderUpdateBox(u) {
@@ -157,10 +157,10 @@
       }
       btn.classList.remove('primary');
       btn.textContent = 'Check now';
-      btn.onclick = async () => { btn.disabled = true; desc.textContent = 'Checkingâ€¦'; renderUpdateBox(await api.checkUpdate()); };
-      if (u.phase === 'checking') { desc.textContent = 'Checking for updatesâ€¦'; btn.disabled = true; }
+      btn.onclick = async () => { btn.disabled = true; desc.textContent = 'Checking…'; renderUpdateBox(await api.checkUpdate()); };
+      if (u.phase === 'checking') { desc.textContent = 'Checking for updates…'; btn.disabled = true; }
       else if (u.phase === 'downloading') {
-        desc.textContent = `Downloading ${u.version}${u.kind === 'installer' ? ' (full installer)' : ''}â€¦ ${Math.round((u.pct || 0) * 100)}%`;
+        desc.textContent = `Downloading ${u.version}${u.kind === 'installer' ? ' (full installer)' : ''}… ${Math.round((u.pct || 0) * 100)}%`;
         bar.hidden = false; bar.firstChild.style.width = `${Math.round((u.pct || 0) * 100)}%`; btn.disabled = true;
       } else if (u.phase === 'error') desc.textContent = `Couldn't check: ${u.error}. Last checked ${ago(u.lastCheck)}.`;
       else desc.textContent = `You're up to date. Last checked ${ago(u.lastCheck)}.`;
@@ -196,13 +196,13 @@
       const el = $('#dc-status'); if (!el || !d) return;
       const map = {
         off: 'Off. Turn it on to connect the bot.',
-        connecting: 'Connecting to Discordâ€¦',
-        online: `Online as ${d.tag || 'the bot'}${d.voice ? ` Â· playing in ðŸ”Š ${d.voice}` : ' Â· type /join in a voice channel'}${d.commands ? ` Â· ${d.commands}` : ''}`,
+        connecting: 'Connecting to Discord…',
+        online: `Online as ${d.tag || 'the bot'}${d.voice ? ` · playing in 🔊 ${d.voice}` : ' · type /join in a voice channel'}${d.commands ? ` · ${d.commands}` : ''}`,
         error: `Not connected: ${d.error || 'unknown error'}`,
       };
       el.textContent = map[d.state] || '';
       el.style.color = d.state === 'online' ? 'var(--ok)' : d.state === 'error' ? 'var(--err)' : '';
-      if (d.warning && d.state === 'online') el.textContent += ` Â· ${d.warning}`;
+      if (d.warning && d.state === 'online') el.textContent += ` · ${d.warning}`;
     }
     window.__renderDiscordBox = renderDiscord;
     api.discordStatus().then(renderDiscord);
@@ -250,7 +250,7 @@
       if (clash) patch[clash[0]] = '';
       const n = await save({ hotkeys: patch });
       stop(btn, pretty(r.accel));
-      if (clash) toast(`Moved ${pretty(r.accel)} from â€œ${(ALL_HOTKEYS.find((h) => h[0] === clash[0]) || [, clash[0]])[1]}â€.`);
+      if (clash) toast(`Moved ${pretty(r.accel)} from “${(ALL_HOTKEYS.find((h) => h[0] === clash[0]) || [, clash[0]])[1]}”.`);
       if (n.hotkeyStatus[key] === 'taken') toast(`${pretty(r.accel)} is already used by another app. Pick a different combo.`, { error: true });
       rerender();
     }
@@ -258,7 +258,7 @@
       if (recording) stop(recording.btn, pretty(s.hotkeys[recording.key]));
       recording = { btn, key: btn.dataset.hk };
       btn.classList.add('rec'); btn.classList.remove('empty');
-      btn.textContent = 'Press keysâ€¦';
+      btn.textContent = 'Press keys…';
       api.suspendHotkeys(true);
       window.addEventListener('keydown', onKey, true);
     }));

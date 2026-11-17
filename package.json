@@ -1,6 +1,6 @@
 {
   "name": "wavelength",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "YouTube Music desktop player with a mini player, hotkeys, ad blocking and listen-together rooms",
   "main": "src/boot/boot.js",
   "scripts": {

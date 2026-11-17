@@ -1,4 +1,4 @@
-// Wavelength â€” YouTube Music desktop player with mini player, hotkeys,
+// Wavelength — YouTube Music desktop player with mini player, hotkeys,
 // ad blocking and listen-together rooms.
 const {
   app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, Tray, Menu,
@@ -137,6 +137,38 @@ const toShell = (ch, ...a) => send(mainWin, ch, ...a);
 const toMini = (ch, ...a) => send(miniWin, ch, ...a);
 
 // ------------------------------------------------------------------ session
+// The Discord audio tap runs on the browser's audio thread (an AudioWorklet),
+// so a busy page can't drop sound. Worklet code is loaded from a blob: URL,
+// which YouTube Music's page policy doesn't list; add `blob:` to its
+// script-src. Electron allows one header hook per session and the ad blocker
+// sets its own, so this wraps the hook: the ad blocker's handler (if any)
+// runs first, then this tweak.
+function allowAudioWorklet(ses) {
+  const wr = ses.webRequest;
+  const orig = wr.onHeadersReceived.bind(wr);
+  let inner = null;
+  const tweak = (d, headers) => {
+    if (d.resourceType !== 'mainFrame' || !/^https:\/\/music\.youtube\.com\//.test(d.url) || !headers) return null;
+    let changed = false;
+    const out = { ...headers };
+    for (const k of Object.keys(out)) {
+      if (!/^content-security-policy$/i.test(k)) continue;
+      out[k] = [].concat(out[k]).map((v) => v.replace(/script-src(?![^;,]*\sblob:)([^;,]*)/g, (m, rest) => { changed = true; return `script-src${rest} blob:`; }));
+    }
+    return changed ? out : null;
+  };
+  orig({ urls: ['<all_urls>'] }, (d, cb) => {
+    const finish = (res = {}) => {
+      if (res.cancel) return cb(res);
+      const out = tweak(d, res.responseHeaders || d.responseHeaders);
+      cb(out ? { ...res, responseHeaders: out } : res);
+    };
+    if (inner) { try { inner(d, finish); } catch { finish({}); } } else finish({});
+  });
+  // Later registrations (the ad blocker on/off) become the inner handler.
+  wr.onHeadersReceived = (filter, listener) => { inner = (typeof filter === 'function' ? filter : listener) || null; };
+}
+
 function setupYtmSession() {
   const ses = session.fromPartition('persist:ytm');
   // Keep Electron's default user agent here: presenting as plain Chrome makes
@@ -148,6 +180,7 @@ function setupYtmSession() {
     cb({ requestHeaders: h });
   });
   ses.setPermissionRequestHandler((_wc, perm, cb) => cb(['media', 'fullscreen', 'clipboard-sanitized-write'].includes(perm)));
+  allowAudioWorklet(ses);
   if (settings.get('adblock')) {
     enableAdblock(ses, app.getPath('userData')).catch((e) => console.error('[adblock] lists unavailable:', e.message));
   }
@@ -468,14 +501,14 @@ let trayKey = '';
 function updateTray() {
   if (!tray) return;
   const s = playerState;
-  const np = s.title ? `${s.title}${s.artist ? ' â€” ' + s.artist : ''}` : 'Nothing playing';
+  const np = s.title ? `${s.title}${s.artist ? ' — ' + s.artist : ''}` : 'Nothing playing';
   const ready = updater && updater.status().ready;
   const key = JSON.stringify([np, !!s.playing, !!miniWin?.isVisible(), ready && ready.version]);
   if (key === trayKey) return;
   trayKey = key;
   tray.setToolTip(`Wavelength\n${np}`.slice(0, 127));
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: np.length > 60 ? np.slice(0, 57) + 'â€¦' : np, enabled: false },
+    { label: np.length > 60 ? np.slice(0, 57) + '…' : np, enabled: false },
     { type: 'separator' },
     { label: s.playing ? 'Pause' : 'Play', click: () => handleAction('toggle') },
     { label: 'Next', click: () => handleAction('next') },
@@ -521,7 +554,7 @@ ipcMain.on('ytm:browse', (_e, id) => { playerCmd('browse', id); showMain(); });
 ipcMain.on('ytm:search-page', (_e, q) => { playerCmd('searchPage', String(q).slice(0, 200)); showMain(); });
 ipcMain.on('ytm:reload', () => ytmView?.webContents.loadURL(YTM_URL));
 ipcMain.on('action', (_e, name, arg) => handleAction(name, arg));
-ipcMain.on('session:summary', (_e, s) => { sessionSummary = s; toMini('session:summary', s); });
+ipcMain.on('session:summary', (_e, s) => { sessionSummary = s; toMini('session:summary', s); if (discord) discord.onPlayerChange(); });
 ipcMain.on('session:add-items', (_e, items, where) => toShell('session:add', { items, where: where === 'next' ? 'next' : 'end', source: 'mini' }));
 ipcMain.handle('settings:get', () => publicSettings());
 ipcMain.handle('settings:set', async (_e, patch) => {
