@@ -105,6 +105,22 @@
         <div class="s-row"><div><div class="lbl">Inside Wavelength</div><div class="desc"><kbd>/</kbd> or <kbd>Ctrl</kbd> + <kbd>F</kbd> search · <kbd>Esc</kbd> close search or settings · right-click a song to add it to Up Next</div></div></div>
       </div>
 
+      <h2>Discord bot</h2>
+      <div class="s-card">
+        <div class="s-row"><div><div class="lbl">Discord bot</div><div class="desc" id="dc-status">Off</div></div>
+          <label class="switch"><input type="checkbox" id="st-dc-on" ${s.discordEnabled ? 'checked' : ''}><span></span></label></div>
+        <div class="s-row"><div><div class="lbl">Bot token</div><div class="desc">From the Discord Developer Portal → your app → Bot → Reset Token. Stays on this PC only.</div></div>
+          <div class="hk-right"><input class="input" id="st-dc-token" type="password" style="width:240px" placeholder="paste token" value="${esc(s.discordToken || '')}" spellcheck="false" autocomplete="off">
+          <button class="btn small" id="st-dc-show" type="button">Show</button></div></div>
+        <div class="s-row"><div><div class="lbl">Server ID</div><div class="desc">Optional. Commands show up instantly in this server (right-click the server → Copy Server ID, with Developer Mode on).</div></div>
+          <input class="input" id="st-dc-guild" style="width:240px" placeholder="all servers" value="${esc(s.discordGuildId || '')}" spellcheck="false"></div>
+        <div class="s-row"><div><div class="lbl">Bot volume</div><div class="desc">How loud Wavelength plays in the voice channel. Your own volume doesn't change it.</div></div>
+          <input class="range" type="range" id="st-dc-vol" min="0" max="150" step="5" value="${s.discordVolume ?? 100}"></div>
+        <div class="s-row"><div><div class="lbl">Add the bot to a server</div><div class="desc">Opens Discord's invite page for your bot.</div></div>
+          <button class="btn small" id="st-dc-invite" type="button">Add to server</button></div>
+        <div class="s-row"><div class="desc">In a voice channel type <kbd>/join</kbd>. Then <kbd>/play</kbd> adds songs, <kbd>/np</kbd> shows controls, <kbd>/queue</kbd>, <kbd>/skip</kbd>, <kbd>/pause</kbd>, <kbd>/resume</kbd>, <kbd>/volume</kbd>, and <kbd>/room start</kbd> · <kbd>/room join</kbd> · <kbd>/room info</kbd> for listening rooms. Discord hears whatever Wavelength is playing, including a room you're in.</div></div>
+      </div>
+
       <h2>App</h2>
       <div class="s-card">
         <div class="s-row"><div><div class="lbl">Keep playing when I close the window</div><div class="desc">Wavelength stays in the system tray and the mini player pops out. Quit from the tray icon.</div></div>
@@ -173,6 +189,32 @@
     bindSwitch('#st-login', 'openAtLogin');
     bindSwitch('#st-compat', 'signinCompat');
     $('#st-peer').addEventListener('change', (e) => save({ peerServer: e.target.value.trim() }));
+    // ---------------------------------------------------- discord bot
+    function renderDiscord(d) {
+      const el = $('#dc-status'); if (!el || !d) return;
+      const map = {
+        off: 'Off. Turn it on to connect the bot.',
+        connecting: 'Connecting to Discord…',
+        online: `Online as ${d.tag || 'the bot'}${d.voice ? ` · playing in 🔊 ${d.voice}` : ' · type /join in a voice channel'}${d.commands ? ` · ${d.commands}` : ''}`,
+        error: `Not connected: ${d.error || 'unknown error'}`,
+      };
+      el.textContent = map[d.state] || '';
+      el.style.color = d.state === 'online' ? 'var(--ok)' : d.state === 'error' ? 'var(--err)' : '';
+      if (d.warning && d.state === 'online') el.textContent += ` · ${d.warning}`;
+    }
+    window.__renderDiscordBox = renderDiscord;
+    api.discordStatus().then(renderDiscord);
+    $('#st-dc-on').addEventListener('change', async (e) => { await save({ discordEnabled: e.target.checked }); });
+    $('#st-dc-token').addEventListener('change', async (e) => { await save({ discordToken: e.target.value.trim() }); toast('Bot token saved.'); });
+    $('#st-dc-guild').addEventListener('change', (e) => save({ discordGuildId: e.target.value.trim().replace(/\D/g, '') }));
+    $('#st-dc-show').onclick = () => { const i = $('#st-dc-token'); const show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#st-dc-show').textContent = show ? 'Hide' : 'Show'; };
+    let dcVolT = null;
+    $('#st-dc-vol').addEventListener('input', (e) => { clearTimeout(dcVolT); dcVolT = setTimeout(() => save({ discordVolume: +e.target.value }), 120); });
+    $('#st-dc-invite').onclick = async () => {
+      const d = await api.discordStatus();
+      if (d.invite) api.openExternal(d.invite); else toast('Paste the bot token first.', { error: true });
+    };
+
     $('#st-transport').addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return;
       await save({ roomTransport: b.dataset.v });

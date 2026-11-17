@@ -69,6 +69,22 @@ messages go through free public MQTT servers, encrypted with a key made from the
 room code. Everyone in a room needs version 1.2 or newer for the relay. If
 joining still fails, set **Settings → Room connection → Always relay** on both PCs.
 
+## Discord bot
+
+Wavelength has a Discord bot built in. Turn it on in **Settings → Discord bot**, paste
+your bot's token (Discord Developer Portal → your app → Bot → Reset Token), and add the
+bot to your server with the **Add to server** button.
+
+- In a voice channel, type `/join`. The bot plays **whatever Wavelength is playing**
+  (your own music, a room you're hosting, or a room you joined), straight from the
+  player, so Discord hears the same ad-free stream at the same moment.
+- `/play` adds songs to Up Next, credited to whoever asked. `/search` lets you pick
+  from results. `/np` posts a live now-playing card with ⏮ ⏯ ⏭ buttons.
+  `/queue`, `/skip`, `/previous`, `/pause`, `/resume`, `/volume`.
+- `/room start` hosts a listening room, `/room join code:K7Q-M2X` joins one, and
+  `/room info` shows the code so friends can join from the Wavelength app.
+- The bot runs inside Wavelength, so it's online while Wavelength is open.
+
 ## Notes
 
 - The ad blocker removes YouTube's audio/video ads and promo banners. YouTube

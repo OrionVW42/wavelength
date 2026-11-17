@@ -6,11 +6,13 @@
 const { app } = require('electron');
 const path = require('path');
 const fs = require('original-fs');
+const { shellId } = require('./shellid');
 
 if (process.env.WL_USERDATA) app.setPath('userData', process.env.WL_USERDATA);
 const builtin = app.getVersion();
 const dir = path.join(app.getPath('userData'), 'versions');
 const stateFile = path.join(dir, 'state.json');
+const SHELL = shellId(process.versions.electron, process.resourcesPath);
 
 const newer = (a, b) => {
   const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
@@ -33,7 +35,7 @@ function pick() {
     if (!/^\d+\.\d+\.\d+$/.test(v) || state.bad.includes(v) || !newer(v, builtin)) continue;
     try {
       const info = JSON.parse(fs.readFileSync(path.join(dir, v, 'info.json'), 'utf8'));
-      if (info.shell !== process.versions.electron) continue;
+      if (info.shell !== SHELL) continue;
       if (!fs.statSync(path.join(dir, v, 'app.asar')).isFile()) continue;
       if (!best || newer(v, best)) best = v;
     } catch { /* incomplete download */ }
@@ -45,7 +47,7 @@ function pick() {
 function launch(chosen) {
   const root = chosen ? path.join(dir, chosen, 'app.asar') : path.join(__dirname, '..', '..');
   global.__wlBoot = {
-    version: chosen || builtin, builtin, root, versionsDir: dir, fromUpdate: !!chosen,
+    version: chosen || builtin, builtin, root, versionsDir: dir, fromUpdate: !!chosen, shell: SHELL,
     // Called by the app once it has started properly.
     confirm() {
       if (!chosen) return;

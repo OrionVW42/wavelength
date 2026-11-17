@@ -171,9 +171,22 @@
       if (u.reason) $('#offline-reason').textContent = `Check your internet connection. (${u.reason})`;
     }
     if ('videoOn' in u) renderVideoBtn(u.videoOn);
+    if (u.discord && window.__renderDiscordBox) window.__renderDiscordBox(u.discord);
   });
   api.onSettings((s) => { settings = s; me.name = s.name; me.color = s.color; session.opts.peerServer = s.peerServer; session.opts.transport = s.roomTransport || 'auto'; });
   api.onSessionAdd((req) => handleAddRequest(req));
+  // Commands from the built-in Discord bot.
+  api.onDiscordCmd(({ action, args, by }) => {
+    if (action === 'room') {
+      if (args.op === 'host') session.host();
+      else if (args.op === 'join') session.join(args.code);
+      else session.leave();
+      return;
+    }
+    const who = by ? { id: 'discord:' + by.id, name: by.name + ' · Discord', color: '#5865f2' } : null;
+    session.do(action, args || {}, who);
+    if (action === 'add' && args.items && args.items[0]) toast(`${by ? by.name : 'Discord'} added “${args.items[0].title}” from Discord`);
+  });
 
   session.on((kind, data) => {
     if (kind === 'toast') toast(data.msg, data);

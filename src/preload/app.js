@@ -34,6 +34,9 @@ contextBridge.exposeInMainWorld('wl', {
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   applyUpdate: () => ipcRenderer.invoke('update:apply'),
   onUpdate: on('update'),
+  // discord bot
+  discordStatus: () => ipcRenderer.invoke('discord:status'),
+  onDiscordCmd: on('discord:cmd'),
   // windows
   layout: (l) => ipcRenderer.send('win:layout', l),
   showMain: () => ipcRenderer.send('win:show-main'),

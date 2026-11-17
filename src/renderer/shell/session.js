@@ -72,7 +72,8 @@
         role: this.role, code: this.code, status: this.status, sync: this.sync,
         members: this.members.map((m) => ({ name: m.name, color: m.color })),
         next: this.queue[0] ? { title: this.queue[0].title, artist: this.queue[0].artist } : null,
-        current: this.current ? { addedBy: this.current.addedBy } : null,
+        current: this.current ? { addedBy: this.current.addedBy, title: this.current.title, artist: this.current.artist } : null,
+        upNext: this.queue.slice(0, 25).map((t) => ({ title: t.title, artist: t.artist, by: t.addedBy ? t.addedBy.name : null })),
         queueLength: this.queue.length,
       };
     }
@@ -177,7 +178,7 @@
 
     // ------------------------------------------------------------ actions
     // Every UI / hotkey / mini-player action lands here.
-    do(action, args = {}) {
+    do(action, args = {}, by = null) {
       if (this.role === 'guest') {
         const playback = ['toggle', 'play', 'pause', 'next', 'prev', 'seek'].includes(action);
         if (playback && !this.sync) return this._local(action, args);
@@ -187,10 +188,10 @@
         }
         if (action === 'toggle') action = this._hostPlaying() ? 'pause' : 'play';
         if (action === 'add') args = { ...args, items: (args.items || []).map(cleanItem) };
-        this.send({ type: 'cmd', action, ...args });
+        this.send({ type: 'cmd', action, ...args, ...(by ? { by } : {}) });
         return;
       }
-      this.apply(action, args, this.memberSelf());
+      this.apply(action, args, by || this.memberSelf());
     }
     memberSelf() { return { id: this.me.id, name: this.me.name, color: this.me.color }; }
     _hostPlaying() { return !!(this.hostPb && this.hostPb.playing); }
@@ -429,7 +430,10 @@
         }
         case 'cmd': {
           const m = entry.member; if (!m) return;
-          const by = { id: m.id, name: m.name, color: m.color };
+          // Songs added through someone's Discord bot carry that Discord user's name.
+          const by = msg.by && typeof msg.by.name === 'string'
+            ? { id: String(msg.by.id || m.id).slice(0, 64), name: String(msg.by.name).slice(0, 40), color: /^#[0-9a-f]{6}$/i.test(msg.by.color) ? msg.by.color : '#5865f2' }
+            : { id: m.id, name: m.name, color: m.color };
           const own = (uidv) => this.queue.find((t) => t.uid === uidv)?.addedBy?.id === m.id;
           const allowed = this.guestsControl || msg.action === 'add' || (msg.action === 'remove' && own(msg.uid));
           if (!allowed) { conn.send({ type: 'toast', msg: 'The host has controls locked.' }); return; }

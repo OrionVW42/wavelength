@@ -17,7 +17,8 @@ function newer(a, b) {
   return false;
 }
 
-function createUpdater({ app, settings, send, current, repo, versionsDir, quit }) {
+function createUpdater({ app, settings, send, current, repo, versionsDir, quit, shell }) {
+  const SHELL = shell || process.versions.electron;
   const api = (process.env.WL_UPDATE_API || 'https://api.github.com').replace(/\/$/, '');
   const headers = { 'User-Agent': 'Wavelength-Updater', Accept: 'application/vnd.github+json' };
   const state = { phase: 'idle', version: null, kind: null, pct: 0, error: null, notes: '', lastCheck: settings.get('lastUpdateCheck') || 0 };
@@ -35,7 +36,7 @@ function createUpdater({ app, settings, send, current, repo, versionsDir, quit }
       if (!newer(v, current) || bad.includes(v)) continue;
       try {
         const info = JSON.parse(fs.readFileSync(path.join(versionsDir, v, 'info.json'), 'utf8'));
-        if (info.shell === process.versions.electron && fs.existsSync(path.join(versionsDir, v, 'app.asar'))) return { version: v, kind: 'app', notes: info.notes || '' };
+        if (info.shell === SHELL && fs.existsSync(path.join(versionsDir, v, 'app.asar'))) return { version: v, kind: 'app', notes: info.notes || '' };
       } catch { /* incomplete */ }
     }
     try {
@@ -89,7 +90,7 @@ function createUpdater({ app, settings, send, current, repo, versionsDir, quit }
     if (r && !newer(m.version, r.version)) { state.phase = 'ready'; state.kind = r.kind; emit(); return; }
     fs.mkdirSync(versionsDir, { recursive: true });
     const onPct = (p) => { state.pct = p; emit(); };
-    if (m.shell === process.versions.electron && m.app && asset(m.app.name)) {
+    if (m.shell === SHELL && m.app && asset(m.app.name)) {
       state.kind = 'app'; state.phase = 'downloading'; state.pct = 0; emit();
       const vdir = path.join(versionsDir, m.version);
       fs.mkdirSync(vdir, { recursive: true });

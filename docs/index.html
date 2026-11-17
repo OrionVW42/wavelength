@@ -132,7 +132,7 @@
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <span class="pill"><i></i>Version 1.2 for Windows · free</span>
+  <span class="pill"><i></i>Version 1.3 for Windows · free</span>
   <h1>YouTube Music,<br><span class="g">on the same wavelength.</span></h1>
   <p class="lede">A desktop player for YouTube Music with a mini player that floats over everything, global hotkeys, a built-in ad blocker, and rooms where your friends hear the same song at the same moment.</p>
   <div class="cta">
@@ -169,6 +169,8 @@
     <div class="card"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>
       <h3>Updates itself</h3><p>New versions download quietly in the background, usually just a few MB. Restart when it suits you.</p></div>
   </div>
+  <div class="card" style="margin-top:16px;display:flex;gap:18px;align-items:flex-start"><div class="icon" style="flex:none;background:rgba(88,101,242,.18);color:#aab3ff"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.6 1.3a18 18 0 0 0-5.6 0L8.6 3a19.6 19.6 0 0 0-4.9 1.4C.6 9 0 13.5.3 18a19.8 19.8 0 0 0 6 3l1.3-2a12.8 12.8 0 0 1-2-1l.5-.4a14 14 0 0 0 11.8 0l.5.4c-.6.4-1.3.7-2 1l1.3 2a19.7 19.7 0 0 0 6-3c.4-5.2-.7-9.7-3.4-13.6ZM8.5 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm7 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z"/></svg></div>
+    <div><h3>Discord bot, built in</h3><p>Turn it on in Settings and your server can listen too. <b>/join</b> brings it into a voice channel playing whatever Wavelength plays: your music, or the room you're in, at the same moment and ad-free. Everyone adds songs with <b>/play</b>, controls it from a live now-playing card, and <b>/room start</b> or <b>/room join</b> ties Discord into a listening room.</p></div></div>
 </div></section>
 
 <section id="together" class="alt"><div class="wrap">
@@ -272,6 +274,8 @@
       <p>Check the code, that your room is still open, and that you're both on version 1.2 or newer (Settings shows the version). Since 1.2, networks that block direct connections fall back to the encrypted relay automatically. If joining still fails, both of you can set <b>Settings → Room connection → Always relay</b>.</p></details>
     <details><summary>Will the ad blocker always work?</summary>
       <p>It works today, but YouTube changes how ads work often. If an ad ever gets through, Wavelength mutes it, presses Skip as soon as it can, and shows a countdown so you know the music is coming.</p></details>
+    <details><summary>How do I set up the Discord bot?</summary>
+      <p>Create an app at the Discord Developer Portal, copy its bot token (Bot → Reset Token), then in Wavelength open <b>Settings → Discord bot</b>: paste the token, turn the bot on and press <b>Add to server</b>. Optionally paste your server's ID so the slash commands appear instantly. The bot is online while Wavelength is open, and in voice it plays exactly what Wavelength plays.</p></details>
     <details><summary>How does it update?</summary>
       <p>Wavelength checks its GitHub releases a few times a day and downloads new versions in the background, usually just a few MB. A <b>Restart to update</b> button appears when it's ready. If an update ever fails to start, Wavelength goes back to the version that worked. You can turn automatic updates off in Settings. (Coming from 1.0? Install 1.1 once by hand; it updates itself from then on.)</p></details>
     <details><summary>What does Wavelength collect?</summary>

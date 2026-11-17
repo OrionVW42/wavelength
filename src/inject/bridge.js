@@ -203,6 +203,45 @@
       }
     } else { wdPos = v.currentTime; wdTicks = 0; }
   }
+  // ------------------------------------------------- audio tap (Discord bot)
+  // When the Discord bot is in a voice channel, the player's own audio is
+  // copied (48 kHz stereo 16-bit PCM) and sent to the bot, so Discord hears
+  // exactly what Wavelength plays: same moment, no ads. Local playback is
+  // unchanged. The tap is only built the first time the bot needs it.
+  let tap = null;
+  function ensureTap() {
+    const v = video(); if (!v) return null;
+    if (tap && tap.el === v) return tap;
+    if (tap) { try { tap.ctx.close(); } catch { /* closed */ } tap = null; }
+    const ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
+    const src = ctx.createMediaElementSource(v);
+    src.connect(ctx.destination); // keep playing through the speakers
+    const sp = ctx.createScriptProcessor(4096, 2, 2);
+    const sink = ctx.createGain(); sink.gain.value = 0; // processor must reach the output to run
+    src.connect(sp); sp.connect(sink); sink.connect(ctx.destination);
+    const t = { el: v, ctx, on: false };
+    sp.onaudioprocess = (e) => {
+      if (!t.on) return;
+      const ib = e.inputBuffer;
+      const L = ib.getChannelData(0), R = ib.numberOfChannels > 1 ? ib.getChannelData(1) : L;
+      // The element's own volume is already applied here; undo it so Discord
+      // gets full level whatever the host's local volume (the bot has its own).
+      const ev = t.el.volume;
+      const g = t.el.muted ? 0 : ev > 0.01 ? Math.min(1 / ev, 60) : 0;
+      const out = new Int16Array(L.length * 2);
+      for (let i = 0, j = 0; i < L.length; i++, j += 2) {
+        let l = L[i] * g, r = R[i] * g;
+        l = l < -1 ? -1 : l > 1 ? 1 : l;
+        r = r < -1 ? -1 : r > 1 ? 1 : r;
+        out[j] = l * 32767; out[j + 1] = r * 32767;
+      }
+      send('pcm', out);
+    };
+    tap = t;
+    return t;
+  }
+  setInterval(() => { if (tap && tap.on && video() && video() !== tap.el) { ensureTap().on = true; } }, 2000);
+
   // ------------------------------------------------------- data saver
   // Album art instead of the video, and the stream held at 144p (the lowest
   // YouTube offers without Premium's audio-only mode). One click shows video.
@@ -312,6 +351,13 @@
     back() { history.back(); },
     browse(browseId) { return navigate({ browseEndpoint: { browseId } }); },
     searchPage(query) { return navigate({ searchEndpoint: { query: String(query) } }); },
+    capture(on) {
+      if (!on && !tap) return true;
+      const t = ensureTap(); if (!t) return false;
+      t.on = !!on;
+      if (t.ctx.state === 'suspended') t.ctx.resume();
+      return true;
+    },
     toggleVideo() {
       cfg.videoFlip = !cfg.videoFlip;
       applySaver(true);

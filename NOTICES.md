@@ -8,6 +8,11 @@ Wavelength is built on these open-source projects:
 | [PeerJS](https://github.com/peers/peerjs) | MIT | Peer-to-peer connections for listening rooms |
 | [@ghostery/adblocker-electron](https://github.com/ghostery/adblocker) | MPL-2.0 | Network ad and tracker blocking |
 | [MQTT.js](https://github.com/mqttjs/MQTT.js) | MIT | Relay connection for listening rooms |
+| [discord.js](https://github.com/discordjs/discord.js) | Apache-2.0 | Built-in Discord bot |
+| [@discordjs/voice](https://github.com/discordjs/discord.js/tree/main/packages/voice) | Apache-2.0 | Discord voice connection |
+| [opusscript](https://github.com/abalabahaha/opusscript) | MIT | Opus audio encoding for Discord |
+| [@snazzah/davey](https://github.com/Snazzah/davey) | MIT | Discord end-to-end encrypted voice (DAVE) |
+| [@noble/ciphers](https://github.com/paulmillr/noble-ciphers) | MIT | Voice encryption |
 | [electron-builder](https://github.com/electron-userland/electron-builder) | MIT | Building the Windows installer |
 
 Listening rooms use the free public PeerJS server (`0.peerjs.com`) only to

@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const { JsonStore } = require('./store');
 const { enableAdblock, disableAdblock } = require('./adblock');
 const { createUpdater } = require('./updater');
+const { DiscordBot, appIdFromToken } = require('./discord');
 
 if (process.env.WL_USERDATA) app.setPath('userData', process.env.WL_USERDATA);
 const TEST = !!process.env.WL_TEST_SCRIPT;
@@ -60,6 +61,10 @@ const settings = new JsonStore(path.join(app.getPath('userData'), 'settings.json
   bounds: null,
   peerServer: '',            // optional self-hosted PeerJS server "host:port"
   roomTransport: 'auto',     // auto | relay | direct
+  discordEnabled: false,     // built-in Discord bot on/off
+  discordToken: '',
+  discordGuildId: '',
+  discordVolume: 100,
 });
 const saved = new JsonStore(path.join(app.getPath('userData'), 'saved.json'), { playlists: [], session: null });
 settings.save(); // persist the generated identity on first run
@@ -84,6 +89,41 @@ let playerState = {};
 let sessionSummary = null;
 let miniDismissed = false, miniWanted = false, miniForced = null, miniMode = 'bar';
 let quitting = false;
+let discord = null, discordStatus = { state: 'off' };
+
+// ------------------------------------------------------------------ Discord bot
+function ensureDiscord() {
+  if (discord) return discord;
+  discord = new DiscordBot({
+    player: () => playerState,
+    summary: () => sessionSummary,
+    act: (action, args, by) => toShell('discord:cmd', { action, args, by }),
+    room: (op, code) => toShell('discord:cmd', { action: 'room', args: { op, code } }),
+    search: (q, isId) => (isId ? ytmCall('resolve', q).then((r) => [r]) : ytmCall('search', q)),
+    capture: (on) => playerCmd('capture', !!on),
+    volume: () => settings.get('discordVolume'),
+    setVolume: (v) => settings.set({ discordVolume: v }),
+    onStatus: (s) => { discordStatus = s; toShell('ui', { discord: s }); },
+    log: (...a) => console.log(...a),
+  });
+  pcmSinks.add(discord.pcmSink);
+  // Keep the audio tap alive across YouTube Music page reloads.
+  setInterval(() => { if (discord && discord.voice) playerCmd('capture', true); }, 5000);
+  return discord;
+}
+function discordInvite() {
+  const id = appIdFromToken(settings.get('discordToken'));
+  return id ? `https://discord.com/oauth2/authorize?client_id=${id}&permissions=36785152&scope=bot%20applications.commands` : null;
+}
+function applyDiscord() {
+  const on = settings.get('discordEnabled') && settings.get('discordToken');
+  if (on) ensureDiscord().start(settings.get('discordToken'), settings.get('discordGuildId'));
+  else if (discord) discord.stop();
+  else {
+    discordStatus = { state: settings.get('discordEnabled') ? 'error' : 'off', error: settings.get('discordEnabled') ? 'Add the bot token first.' : null };
+    toShell('ui', { discord: discordStatus });
+  }
+}
 let hotkeysSuspended = false;
 const hotkeyStatus = {};
 
@@ -337,13 +377,20 @@ function onPlayerState(s) {
   if (key !== lastTrackKey) { lastTrackKey = key; miniDismissed = false; if (miniForced === false) miniForced = null; }
   // Mini player appears once something actually plays.
   if (s.playing && (!prev.playing || prev.videoId !== s.videoId || prev.ad !== s.ad)) { miniWanted = true; updateMini(); }
-  if (prev.playing !== s.playing || prev.videoId !== s.videoId || prev.title !== s.title) updateTray();
+  if (prev.playing !== s.playing || prev.videoId !== s.videoId || prev.title !== s.title) { updateTray(); if (discord) discord.onPlayerChange(); }
 }
 
 function runInYtm(code) {
   if (!ytmView) return Promise.reject(new Error('not ready'));
   return ytmView.webContents.executeJavaScript(code, true);
 }
+// Player audio for the Discord bot (48 kHz stereo s16le chunks from the bridge).
+const pcmSinks = new Set();
+function onPcm(data) {
+  const buf = Buffer.from(data.buffer || data, data.byteOffset || 0, data.byteLength);
+  for (const f of pcmSinks) { try { f(buf); } catch (e) { console.error('[pcm]', e.message); } }
+}
+
 // Bridge config survives page reloads: the bridge reads it when injected.
 const bridgeCfg = {};
 function playerCmd(cmd, ...args) {
@@ -460,6 +507,7 @@ ipcMain.on('wl:bridge', (e) => {
 ipcMain.on('wl:signin-compat', (e) => { e.returnValue = settings.get('signinCompat') ? SIGNIN_UA : null; });
 ipcMain.on('ytm:msg', (e, type, data) => {
   if (!ytmView || e.sender !== ytmView.webContents) return;
+  if (type === 'pcm') { if (data) onPcm(data); return; }
   if (type === 'state') onPlayerState(data || {});
   else if (type === 'add') toShell('session:add', data);
   else if (type === 'video') { bridgeCfg.videoFlip = !!data.flip; toShell('ui', { videoOn: !!data.on }); }
@@ -475,7 +523,7 @@ ipcMain.on('session:summary', (_e, s) => { sessionSummary = s; toMini('session:s
 ipcMain.on('session:add-items', (_e, items, where) => toShell('session:add', { items, where: where === 'next' ? 'next' : 'end', source: 'mini' }));
 ipcMain.handle('settings:get', () => publicSettings());
 ipcMain.handle('settings:set', async (_e, patch) => {
-  const before = settings.get();
+  const before = { ...settings.get() }; // a copy: settings.set() mutates the live object
   const prevAd = before.adblock, prevLogin = before.openAtLogin, prevSaver = before.dataSaver;
   if (patch.hotkeys) patch.hotkeys = { ...settings.get('hotkeys'), ...patch.hotkeys };
   settings.set(patch);
@@ -497,6 +545,8 @@ ipcMain.handle('settings:set', async (_e, patch) => {
     settings.set({ miniPos: null });
   }
   if ('autoUpdate' in patch && patch.autoUpdate && updater) updater.run();
+  if (['discordEnabled', 'discordToken', 'discordGuildId'].some((k) => k in patch && patch[k] !== before[k])) applyDiscord();
+  if ('discordVolume' in patch && discord) discord.setVolume(patch.discordVolume);
   const pub = publicSettings();
   toMini('settings', pub); toShell('settings', pub);
   return pub;
@@ -529,13 +579,14 @@ ipcMain.on('clipboard:write', (_e, t) => clipboard.writeText(String(t)));
 ipcMain.on('open-external', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
 ipcMain.on('hotkeys:suspend', (_e, on) => { hotkeysSuspended = !!on; registerHotkeys(); });
 ipcMain.handle('app:info', () => ({ version: VERSION, electron: process.versions.electron, fromUpdate: !!BOOT?.fromUpdate }));
+ipcMain.handle('discord:status', () => ({ ...discordStatus, invite: discordInvite() }));
 ipcMain.handle('update:status', () => updater ? updater.status() : null);
 ipcMain.handle('update:check', () => updater ? updater.run().then(() => updater.status()) : null);
 ipcMain.handle('update:apply', () => updater ? updater.apply() : { ok: false });
 
 // ------------------------------------------------------------------ lifecycle
 app.on('second-instance', showMain);
-app.on('before-quit', () => { quitting = true; settings.flush(); saved.flush(); });
+app.on('before-quit', () => { quitting = true; settings.flush(); saved.flush(); if (discord) discord.stop(); });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => { if (quitting) app.quit(); });
 
@@ -549,15 +600,17 @@ app.whenReady().then(() => {
     app, settings, current: VERSION,
     repo: process.env.WL_UPDATE_REPO || (PKG.wavelength && PKG.wavelength.github) || 'OrionVW42/wavelength',
     versionsDir: BOOT ? BOOT.versionsDir : path.join(app.getPath('userData'), 'versions'),
+    shell: BOOT && BOOT.shell,
     send: (s) => { toShell('update', s); updateTray(); },
     quit: (relaunch) => { quitting = true; if (relaunch) app.relaunch(); app.quit(); },
   });
   if (!TEST || process.env.WL_TEST_UPDATER) updater.schedule();
+  if (!TEST || process.env.WL_TEST_DISCORD) applyDiscord();
   // This version started fine: the launcher may keep using it.
   setTimeout(() => BOOT && BOOT.confirm(), TEST ? 3000 : 15000);
   if (TEST) {
     const ctx = { app, mainWin, miniWin, ytmView, playerCmd, ytmCall, handleAction, settings, saved, updater, boot: BOOT, version: VERSION,
-      getPlayerState: () => playerState, getSummary: () => sessionSummary, hotkeyStatus, runInYtm };
+      pcmSinks, getDiscord: () => discord, ensureDiscord, getPlayerState: () => playerState, getSummary: () => sessionSummary, hotkeyStatus, runInYtm };
     require(path.resolve(process.env.WL_TEST_SCRIPT))(ctx).then(
       (ok) => { console.log(ok === false ? 'WLTEST FAIL' : 'WLTEST PASS'); quitting = true; app.exit(ok === false ? 1 : 0); },
       (err) => { console.log('WLTEST FAIL', err && err.stack); quitting = true; app.exit(1); },

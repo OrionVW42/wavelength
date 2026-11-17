@@ -15,6 +15,7 @@ const root = path.join(__dirname, '..');
 const exe = path.join(root, 'dist', 'win-unpacked', 'Wavelength.exe');
 const asar = require('fs').readFileSync(path.join(root, 'dist', fs.readdirSync(path.join(root, 'dist')).find((f) => /^wavelength-app-.*\.asar$/.test(f))));
 const electronVersion = require(path.join(root, 'node_modules', 'electron', 'package.json')).version;
+const SHELL = JSON.parse(fs.readFileSync(path.join(root, 'dist', 'wavelength-update.json'), 'utf8')).shell;
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-upd-'));
 let ok = true;
 const check = (name, cond, detail = '') => { ok = ok && !!cond; console.log(`${cond ? 'ok  ' : 'FAIL'} [updater] ${name}${detail ? ' — ' + detail : ''}`); };
@@ -29,7 +30,7 @@ const server = http.createServer((req, res) => {
     ] }));
   }
   if (req.url === '/dl/manifest') {
-    return res.end(JSON.stringify({ version: '9.9.9', shell: electronVersion,
+    return res.end(JSON.stringify({ version: '9.9.9', shell: process.env.WL_DEV ? electronVersion : SHELL,
       app: { name: 'wavelength-app-9.9.9.asar', size: asar.length, sha256: crypto.createHash('sha256').update(asar).digest('hex') } }));
   }
   if (req.url === '/dl/asar') { res.setHeader('content-length', asar.length); return res.end(asar); }
@@ -69,7 +70,7 @@ server.listen(0, '127.0.0.1', async () => {
   const bad = path.join(userData, 'versions', '9.9.10');
   fs.mkdirSync(bad, { recursive: true });
   fs.writeFileSync(path.join(bad, 'app.asar'), 'not an asar file');
-  fs.writeFileSync(path.join(bad, 'info.json'), JSON.stringify({ version: '9.9.10', shell: electronVersion }));
+  fs.writeFileSync(path.join(bad, 'info.json'), JSON.stringify({ version: '9.9.10', shell: process.env.WL_DEV ? electronVersion : SHELL }));
   const c = lines(await run('updater-b.js'));
   const st2 = JSON.parse(fs.readFileSync(path.join(userData, 'versions', 'state.json'), 'utf8'));
   check('a damaged update falls back without an error', c.some((l) => /^version 9\.9\.9 /.test(l) || /^version 1\./.test(l)), c.join(' | '));
