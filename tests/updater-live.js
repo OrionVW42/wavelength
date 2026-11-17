@@ -7,7 +7,7 @@ const { createUpdater } = require('../src/main/updater');
 module.exports = async (ctx) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wl-live-upd-'));
   const store = { d: {}, get(k) { return this.d[k]; }, set(p) { Object.assign(this.d, p); } };
-  const u = createUpdater({ app: ctx.app, settings: store, send: () => {}, current: process.env.LIVE_FROM || '1.1.0', shell: process.versions.electron, repo: 'OrionVW42/wavelength', versionsDir: dir, quit: () => {} });
+  const u = createUpdater({ app: ctx.app, settings: store, send: () => {}, current: process.env.LIVE_FROM || '1.1.0', shell: process.env.LIVE_SHELL || process.versions.electron, repo: 'OrionVW42/wavelength', versionsDir: dir, quit: () => {} });
   const t0 = Date.now();
   await u.run();
   const s = u.status();
