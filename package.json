@@ -1,0 +1,73 @@
+{
+  "name": "wavelength",
+  "version": "1.0.1",
+  "description": "YouTube Music desktop player with a mini player, hotkeys, ad blocking and listen-together rooms",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "icon": "electron tools/make-icon.js",
+    "test": "node tests/run.js",
+    "dist": "electron-builder --win nsis"
+  },
+  "author": "Wavelength contributors",
+  "homepage": "https://orionvw42.github.io/wavelength/",
+  "repository": { "type": "git", "url": "https://github.com/OrionVW42/wavelength.git" },
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^45.3.3",
+    "electron-builder": "^26.18.0"
+  },
+  "dependencies": {
+    "@ghostery/adblocker-electron": "^2.20.3",
+    "peerjs": "^1.5.5"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true
+  },
+  "productName": "Wavelength",
+  "private": true,
+  "build": {
+    "appId": "app.wavelength.player",
+    "productName": "Wavelength",
+    "copyright": "Wavelength",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/*.d.ts"
+    ],
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "Wavelength-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Wavelength",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

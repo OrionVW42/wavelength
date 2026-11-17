@@ -1,0 +1,67 @@
+html, body { background: transparent !important; }
+body { padding: 7px 8px 9px; }
+.mini {
+  position: relative; height: 76px; border-radius: 18px; overflow: hidden;
+  display: flex; align-items: center; gap: 12px; padding: 0 10px 0 10px;
+  background: rgba(16, 16, 23, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: drop .28s cubic-bezier(.2, .9, .3, 1.2);
+}
+@keyframes drop { from { transform: translateY(-14px); opacity: 0; } }
+.bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.bg img { width: 100%; height: 100%; object-fit: cover; filter: blur(28px) saturate(1.6) brightness(.45); transform: scale(1.4); opacity: .9; transition: opacity .5s; }
+.bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10,10,15,.55), rgba(10,10,15,.82) 60%); }
+.mini > *:not(.bg):not(.progress):not(.flash) { position: relative; z-index: 1; }
+.mini > .progress, .mini > .flash { z-index: 2; }
+.drag { -webkit-app-region: drag; }
+button { -webkit-app-region: no-drag; }
+
+.art-wrap { width: 54px; height: 54px; flex: none; border-radius: 11px; overflow: hidden; background: rgba(255,255,255,.06); box-shadow: 0 4px 14px -4px rgba(0,0,0,.6); }
+.art { width: 100%; height: 100%; object-fit: cover; }
+.art-ph { width: 100%; height: 100%; display: grid; place-items: center; }
+.art-ph svg { width: 26px; height: 26px; border-radius: 7px; }
+.info { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+.title { font: 600 14px/1.25 var(--font-display); white-space: nowrap; overflow: hidden; mask-image: linear-gradient(90deg, #000 88%, transparent); }
+.title span { display: inline-block; }
+.title.marquee span { animation: marquee var(--dur, 10s) linear infinite; padding-right: 40px; }
+@keyframes marquee { 0%, 15% { transform: translateX(0); } 85%, 100% { transform: translateX(var(--shift)); } }
+.sub { color: rgba(255,255,255,.62); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.sub .time { color: rgba(255,255,255,.42); font-variant-numeric: tabular-nums; }
+
+.ctrls { display: flex; align-items: center; gap: 2px; }
+.cbtn { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: rgba(255,255,255,.85); transition: background .15s, transform .1s; }
+.cbtn:hover { background: rgba(255,255,255,.1); color: #fff; }
+.cbtn:active { transform: scale(.92); }
+.cbtn svg { width: 18px; height: 18px; }
+.cbtn.play { width: 40px; height: 40px; background: #fff; color: #111; margin: 0 2px; }
+.cbtn.play:hover { background: #fff; transform: scale(1.05); }
+.cbtn.play svg { width: 20px; height: 20px; }
+.cbtn.like.on { color: #ff4d6d; }
+
+.side { display: flex; flex-direction: column; gap: 2px; margin-left: 2px; }
+.sbtn { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: rgba(255,255,255,.45); }
+.sbtn:hover { color: #fff; background: rgba(255,255,255,.1); }
+.sbtn svg { width: 13px; height: 13px; }
+
+.room {
+  font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 1px;
+  color: #3ddc97; display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden;
+}
+.room span.txt { overflow: hidden; text-overflow: ellipsis; }
+.room .dot { flex: none; width: 5px; height: 5px; border-radius: 50%; background: #3ddc97; }
+.room.solo { color: rgba(255,255,255,.5); } .room.solo .dot { background: rgba(255,255,255,.5); }
+
+.progress { position: absolute; left: 0; right: 0; bottom: 0; height: 9px; cursor: pointer; display: flex; align-items: flex-end; -webkit-app-region: no-drag; }
+.progress::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255,255,255,.1); }
+.fill { position: relative; height: 3px; width: 0; background: linear-gradient(90deg, #ff4d6d, #8b5cf6); border-radius: 0 2px 2px 0; }
+.progress:hover::before, .progress:hover .fill { height: 5px; }
+
+.flash {
+  position: absolute; right: 120px; top: 50%; transform: translateY(-50%) scale(.9); padding: 5px 10px; border-radius: 10px;
+  background: rgba(0,0,0,.75); font-weight: 600; font-size: 12px; opacity: 0; transition: opacity .15s, transform .15s; pointer-events: none; z-index: 3;
+}
+.flash.show { opacity: 1; transform: translateY(-50%) scale(1); }
+.mini.idle .ctrls .cbtn:not(.play) { opacity: .5; }
+.mini.ad .title { color: rgba(255,255,255,.6); }
+.mini.ad .fill { background: rgba(255,255,255,.25); }

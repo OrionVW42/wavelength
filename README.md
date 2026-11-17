@@ -1,0 +1,82 @@
+# Wavelength
+
+A desktop player for **YouTube Music** with a floating mini player, global hotkeys,
+a built-in ad blocker, and **listen-together rooms**: share a code, and everyone hears
+the same songs at the same moment, with a shared Up Next anyone can add to.
+
+**[Website](https://orionvw42.github.io/wavelength/) · [Download for Windows](https://github.com/OrionVW42/wavelength/releases/latest)**
+
+![Wavelength with a live listening room and the mini player](docs/media/screenshots/hero.jpg)
+
+## Install
+
+Download `Wavelength-Setup-<version>.exe` from the
+[latest release](https://github.com/OrionVW42/wavelength/releases/latest) and run it.
+It installs for your Windows user only (no admin prompt) and opens when done.
+
+> Windows may show **"Windows protected your PC"** because the installer isn't
+> code-signed. Click **More info → Run anyway**.
+
+## First run
+
+1. Click **Sign in** (top right of YouTube Music) and sign in with your Google account.
+   Your library, playlists and liked songs are now there, same as on the website.
+2. Play anything. The mini player drops in at the top of your screen.
+
+## Everyday use
+
+| | |
+|---|---|
+| **Mini player** | Floats over every window. Drag it anywhere. Scroll over it to change volume, click the bar to seek. ⤢ opens the full player, ✕ hides it until the next song. |
+| **Up Next** (right panel) | Your queue. It plays before YouTube Music's own autoplay. Search or paste a link, or **right-click any song, album or playlist** in YouTube Music → *Add to Up Next* / *Play next*. Drag to reorder. |
+| **From your library** | Add a whole playlist (or Liked Music) to Up Next, in order or shuffled. |
+| **Save** | The 💾 button saves what's playing plus Up Next (and optionally what already played) as a playlist. Find it under **Saved**: play it again, rename it, or push it into your YouTube Music library. |
+| **Closing** | Closing the window keeps the music going in the system tray. Quit from the tray icon. |
+
+### Default hotkeys (change them in Settings)
+
+| Action | Keys |
+|---|---|
+| Play / pause | `Ctrl+Alt+Space` (and your keyboard's ⏯ key) |
+| Next / previous | `Ctrl+Alt+→` / `Ctrl+Alt+←` (and ⏭ / ⏮) |
+| Volume up / down | `Ctrl+Alt+↑` / `Ctrl+Alt+↓` |
+| Like song | `Ctrl+Alt+L` |
+| Show / hide full player | `Ctrl+Alt+M` |
+| Show / hide mini player | `Ctrl+Alt+N` |
+
+## Listen together
+
+1. One person opens **Up Next → Start a room** and clicks **Copy invite**.
+2. Friends paste the code (like `K7Q-M2X`) into **Join**.
+3. Everyone's player follows the host: same song, same spot, pause and skip
+   together. Anyone can add songs; each one shows who added it. The room list shows
+   what every member is listening to, live.
+4. Turn off **Listen in sync** to go solo while staying in the room. You'll still
+   see the queue and can keep adding songs.
+5. The host can lock playback controls so guests can only add songs.
+
+Everyone needs their own copy of Wavelength. Friends don't need YouTube Music
+Premium or even an account: playback works signed out too.
+
+Rooms connect your computers directly (peer-to-peer). In rare cases (strict
+company or school networks) two computers can't reach each other, and joining
+says it couldn't reach the room.
+
+## Notes
+
+- The ad blocker removes YouTube's audio/video ads and promo banners. YouTube
+  changes things often; if an ad slips through, it's muted and fast-forwarded.
+- If Google ever says the browser "may not be secure" while signing in, toggle
+  **Settings → Google sign-in compatibility** and try again.
+
+## For developers
+
+```bash
+npm install
+npm start                 # run from source
+node tests/together.js    # two-instance listen-together test (real network)
+npm run dist              # build dist/Wavelength-Setup-<version>.exe
+```
+
+The smoke test runs the real app against YouTube Music, muted:
+`WL_TEST_SCRIPT=tests/smoke.js WL_USERDATA=<temp dir> npx electron .`

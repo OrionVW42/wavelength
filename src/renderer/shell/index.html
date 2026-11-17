@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:">
+<title>Wavelength</title>
+<link rel="stylesheet" href="../common/base.css">
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<header class="titlebar">
+  <div class="brand"><span id="logo"></span><span class="brand-name">Wavelength</span></div>
+  <nav class="nav">
+    <button class="icon-btn" id="nav-back" title="Back"></button>
+    <button class="icon-btn" id="nav-home" title="YouTube Music home"></button>
+  </nav>
+  <div class="tb-center"><div id="toast" class="toast" role="status" aria-live="polite"></div></div>
+  <div class="tb-right">
+    <button class="room-pill" id="room-pill" hidden></button>
+    <button class="icon-btn" id="btn-mini" title="Mini player (Ctrl+Alt+N)"></button>
+    <button class="icon-btn" id="btn-settings" title="Settings"></button>
+    <button class="tb-toggle" id="btn-panel" title="Up Next &amp; listening rooms"><span class="ic"></span><span>Up Next</span><span class="badge" id="queue-badge" hidden>0</span></button>
+  </div>
+</header>
+
+<div id="ytm-area" class="ytm-area">
+  <div class="ytm-loading" id="ytm-loading">
+    <div class="pulse-logo" id="loading-logo"></div>
+    <div>Loading YouTube Music…</div>
+  </div>
+  <div class="ytm-offline" id="ytm-offline" hidden>
+    <div class="big">Can't reach YouTube Music</div>
+    <div class="muted" id="offline-reason">Check your internet connection.</div>
+    <button class="btn primary" id="btn-retry">Try again</button>
+  </div>
+</div>
+
+<aside id="panel" class="panel">
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="session" role="tab">Up Next</button>
+    <button class="tab" data-tab="saved" role="tab">Saved</button>
+  </div>
+
+  <div class="tab-body" id="tab-session">
+    <section class="card room-card" id="room-card"></section>
+
+    <section class="np" id="np" hidden>
+      <img class="np-art" id="np-art" alt="">
+      <div class="np-meta">
+        <div class="np-label" id="np-label">Now playing</div>
+        <div class="np-title" id="np-title"></div>
+        <div class="np-artist" id="np-artist"></div>
+        <div class="np-bar"><div class="np-fill" id="np-fill"></div></div>
+      </div>
+    </section>
+
+    <div class="add-box">
+      <span class="add-ic" id="add-ic"></span>
+      <input id="add-input" type="text" placeholder="Search songs or paste a YouTube Music link" spellcheck="false" autocomplete="off">
+      <button class="icon-btn small" id="add-clear" title="Clear" hidden></button>
+    </div>
+    <div class="quick-row">
+      <button class="chip" id="btn-add-current"></button>
+      <button class="chip" id="btn-library"></button>
+    </div>
+    <div id="results" class="results" hidden></div>
+
+    <div class="list-head">
+      <div><span class="h">Up next</span> <span class="muted" id="queue-meta"></span></div>
+      <div class="list-actions">
+        <button class="icon-btn small" id="btn-shuffle" title="Shuffle Up Next"></button>
+        <button class="icon-btn small" id="btn-save" title="Save as playlist"></button>
+        <button class="icon-btn small" id="btn-clear" title="Clear Up Next"></button>
+      </div>
+    </div>
+    <ol id="queue" class="tracks"></ol>
+    <div class="empty" id="queue-empty">
+      <div class="empty-title">Nothing queued yet</div>
+      <div class="muted">Search above, or right-click any song or playlist in YouTube Music and pick <b>Add to Up Next</b>.</div>
+    </div>
+
+    <details class="history" id="history" hidden>
+      <summary><span class="ic-chev"></span> Played <span class="muted" id="history-meta"></span></summary>
+      <ol id="history-list" class="tracks dim"></ol>
+    </details>
+  </div>
+
+  <div class="tab-body" id="tab-saved" hidden>
+    <div class="list-head">
+      <div><span class="h">Saved playlists</span></div>
+      <button class="btn small" id="btn-save-2">Save this session</button>
+    </div>
+    <div id="saved-list"></div>
+    <div class="empty" id="saved-empty">
+      <div class="empty-title">No saved playlists</div>
+      <div class="muted">When a session's queue is just right, save it here and bring it back any time, solo or with friends.</div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal" hidden><div class="modal-card" id="modal-card"></div></div>
+</aside>
+
+<section id="settings" class="settings" hidden></section>
+
+<script src="../common/icons.js"></script>
+<script src="../../../node_modules/peerjs/dist/peerjs.min.js"></script>
+<script src="session.js"></script>
+<script src="settings.js"></script>
+<script src="shell.js"></script>
+</body>
+</html>

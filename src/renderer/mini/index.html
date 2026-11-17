@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; script-src 'self'; style-src 'self' 'unsafe-inline'">
+<title>Wavelength mini player</title>
+<link rel="stylesheet" href="../common/base.css">
+<link rel="stylesheet" href="mini.css">
+</head>
+<body>
+<div class="mini idle" id="mini">
+  <div class="bg"><img id="bg" alt=""></div>
+  <div class="art-wrap drag"><img class="art" id="art" alt=""><div class="art-ph" id="art-ph"></div></div>
+  <div class="info drag">
+    <div class="room" id="room" hidden></div>
+    <div class="title" id="title-wrap"><span id="title">Nothing playing</span></div>
+    <div class="sub"><span id="artist">Open Wavelength to pick something</span></div>
+  </div>
+  <div class="ctrls">
+    <button class="cbtn like" id="b-like" title="Like"></button>
+    <button class="cbtn" id="b-prev" title="Previous"></button>
+    <button class="cbtn play" id="b-play" title="Play / pause"></button>
+    <button class="cbtn" id="b-next" title="Next"></button>
+  </div>
+  <div class="side">
+    <button class="sbtn" id="b-full" title="Open full player"></button>
+    <button class="sbtn" id="b-close" title="Hide until the next song"></button>
+  </div>
+  <div class="progress" id="prog"><div class="fill" id="fill"></div></div>
+  <div class="flash" id="flash"></div>
+</div>
+<script src="../common/icons.js"></script>
+<script src="mini.js"></script>
+</body>
+</html>

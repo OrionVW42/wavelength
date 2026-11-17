@@ -1,0 +1,475 @@
+// Wavelength — YouTube Music desktop player with mini player, hotkeys,
+// ad blocking and listen-together rooms.
+const {
+  app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, Tray, Menu,
+  nativeImage, session, shell, screen, clipboard,
+} = require('electron');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
+const { JsonStore } = require('./store');
+const { enableAdblock, disableAdblock } = require('./adblock');
+
+if (process.env.WL_USERDATA) app.setPath('userData', process.env.WL_USERDATA);
+const TEST = !!process.env.WL_TEST_SCRIPT;
+
+const ROOT = path.join(__dirname, '..', '..');
+const ICON = path.join(ROOT, 'build', 'icon.png');
+const YTM_URL = 'https://music.youtube.com/';
+const TITLEBAR = 44;
+const MINI = { w: 468, h: 92 };
+const COLORS = ['#ff4d6d', '#ff8a3d', '#ffd23f', '#3ddc97', '#27c3ff', '#7c6cff', '#e15bff', '#ff5fa2'];
+
+// ------------------------------------------------------------------ settings
+const DEFAULT_HOTKEYS = {
+  toggle: 'Ctrl+Alt+Space',
+  next: 'Ctrl+Alt+Right',
+  prev: 'Ctrl+Alt+Left',
+  volUp: 'Ctrl+Alt+Up',
+  volDown: 'Ctrl+Alt+Down',
+  like: 'Ctrl+Alt+L',
+  showFull: 'Ctrl+Alt+M',
+  toggleMini: 'Ctrl+Alt+N',
+};
+const settings = new JsonStore(path.join(app.getPath('userData'), 'settings.json'), {
+  id: crypto.randomUUID(),
+  name: (() => { try { return os.userInfo().username; } catch { return 'Listener'; } })(),
+  color: COLORS[Math.floor(Math.random() * COLORS.length)],
+  miniMode: 'playing',       // playing | always | background | never
+  miniPos: null,
+  closeToTray: true,
+  openAtLogin: false,
+  adblock: true,
+  mediaKeys: true,
+  signinCompat: true,
+  hotkeys: DEFAULT_HOTKEYS,
+  panelOpen: true,
+  bounds: null,
+  peerServer: '',            // optional self-hosted PeerJS server "host:port"
+});
+const saved = new JsonStore(path.join(app.getPath('userData'), 'saved.json'), { playlists: [], session: null });
+// Persist the generated identity on first run.
+settings.save();
+
+// Own the keyboard media keys ourselves (so they follow the listening room);
+// Chromium's built-in handler would otherwise also toggle playback.
+if (settings.get('mediaKeys')) app.commandLine.appendSwitch('disable-features', 'HardwareMediaKeyHandling,MediaSessionService');
+// Guests in a room start tracks without clicking anything.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+if (!TEST && !app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
+app.setAppUserModelId('app.wavelength.player');
+
+let mainWin = null, ytmView = null, miniWin = null, tray = null;
+let layoutState = { panel: settings.get('panelOpen') ? 380 : 0, hideYtm: false };
+let playerState = {};
+let sessionSummary = null;
+let miniDismissed = false, miniWanted = false;
+let quitting = false;
+let hotkeysSuspended = false;
+const hotkeyStatus = {};
+
+const chromeMajor = process.versions.chrome.split('.')[0];
+const SIGNIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
+const BRIDGE = fs.readFileSync(path.join(ROOT, 'src', 'inject', 'bridge.js'), 'utf8');
+
+const send = (win, ch, ...a) => { if (win && !win.isDestroyed()) win.webContents.send(ch, ...a); };
+const toShell = (ch, ...a) => send(mainWin, ch, ...a);
+const toMini = (ch, ...a) => send(miniWin, ch, ...a);
+
+// ------------------------------------------------------------------ session
+function setupYtmSession() {
+  const ses = session.fromPartition('persist:ytm');
+  // Keep Electron's default user agent here: presenting as plain Chrome makes
+  // YouTube's streaming server stop sending audio (seeks and ~50s in freeze).
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://accounts.google.com/*'] }, (d, cb) => {
+    if (!settings.get('signinCompat')) return cb({ requestHeaders: d.requestHeaders });
+    const h = { ...d.requestHeaders, 'User-Agent': SIGNIN_UA };
+    for (const k of Object.keys(h)) if (/^sec-ch-ua/i.test(k)) delete h[k];
+    cb({ requestHeaders: h });
+  });
+  ses.setPermissionRequestHandler((_wc, perm, cb) => cb(['media', 'fullscreen', 'clipboard-sanitized-write'].includes(perm)));
+  if (settings.get('adblock')) {
+    enableAdblock(ses, app.getPath('userData')).catch((e) => console.error('[adblock] lists unavailable:', e.message));
+  }
+  return ses;
+}
+
+// ------------------------------------------------------------------ windows
+function createMain() {
+  const b = settings.get('bounds');
+  mainWin = new BrowserWindow({
+    width: b?.width || 1280, height: b?.height || 820,
+    x: b?.x, y: b?.y,
+    minWidth: 860, minHeight: 560,
+    show: false,
+    backgroundColor: '#0a0a0f',
+    icon: ICON,
+    title: 'Wavelength',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#0a0a0f', symbolColor: '#c9c9d6', height: TITLEBAR },
+    webPreferences: {
+      preload: path.join(ROOT, 'src', 'preload', 'app.js'),
+      contextIsolation: true, sandbox: true, backgroundThrottling: false,
+    },
+  });
+  if (b?.maximized) mainWin.maximize();
+  mainWin.loadFile(path.join(ROOT, 'src', 'renderer', 'shell', 'index.html'));
+
+  ytmView = new WebContentsView({
+    webPreferences: {
+      session: setupYtmSession(),
+      preload: path.join(ROOT, 'src', 'preload', 'ytm.js'),
+      contextIsolation: true, sandbox: true, backgroundThrottling: false,
+    },
+  });
+  ytmView.setBackgroundColor('#030303');
+  mainWin.contentView.addChildView(ytmView);
+  const wc = ytmView.webContents;
+  if (TEST) wc.setAudioMuted(true);
+  wc.loadURL(YTM_URL);
+  wc.setWindowOpenHandler(({ url }) => {
+    if (isYtmUrl(url)) { wc.loadURL(url); return { action: 'deny' }; }
+    shell.openExternal(url); return { action: 'deny' };
+  });
+  wc.on('will-navigate', (e, url) => { if (!isInternalUrl(url)) { e.preventDefault(); shell.openExternal(url); } });
+  wc.on('context-menu', onYtmContextMenu);
+  wc.on('did-fail-load', (_e, code, desc, url, isMain) => {
+    if (isMain && code !== -3) toShell('ui', { offline: true, reason: desc });
+  });
+  wc.on('did-finish-load', () => toShell('ui', { offline: false }));
+  wc.on('render-process-gone', () => setTimeout(() => wc.reload(), 1000));
+
+  mainWin.on('resize', layout);
+  mainWin.on('maximize', layout);
+  mainWin.on('unmaximize', layout);
+  mainWin.once('ready-to-show', () => {
+    layout();
+    if (!process.argv.includes('--hidden') && !TEST) mainWin.show();
+  });
+  const saveBounds = () => {
+    if (mainWin.isDestroyed() || mainWin.isMinimized()) return;
+    settings.set({ bounds: { ...mainWin.getNormalBounds(), maximized: mainWin.isMaximized() } });
+  };
+  mainWin.on('moved', saveBounds);
+  mainWin.on('resized', saveBounds);
+  mainWin.on('close', (e) => {
+    if (!quitting && settings.get('closeToTray')) {
+      e.preventDefault(); mainWin.hide(); updateMini();
+      if (!saved.get('trayHintShown')) {
+        saved.set({ trayHintShown: true });
+        tray?.displayBalloon?.({ title: 'Wavelength is still playing', content: 'It lives in the tray. Right-click the icon to quit.', iconType: 'info' });
+      }
+    }
+  });
+  mainWin.on('show', updateMini);
+  mainWin.on('hide', updateMini);
+  mainWin.on('minimize', updateMini);
+  mainWin.on('restore', updateMini);
+  mainWin.on('focus', updateMini);
+}
+
+const isYtmUrl = (u) => { try { return new URL(u).hostname === 'music.youtube.com'; } catch { return false; } };
+function isInternalUrl(u) {
+  try {
+    const h = new URL(u).hostname;
+    return h === 'music.youtube.com' || h.endsWith('.google.com') || h === 'google.com' ||
+      h.endsWith('.youtube.com') || h === 'youtube.com' || h.endsWith('.google.co.uk') || h.endsWith('gstatic.com');
+  } catch { return false; }
+}
+
+function layout() {
+  if (!mainWin || mainWin.isDestroyed() || !ytmView) return;
+  const [w, h] = mainWin.getContentSize();
+  const panel = Math.min(layoutState.panel, Math.max(0, w - 480));
+  ytmView.setVisible(!layoutState.hideYtm);
+  ytmView.setBounds({ x: 0, y: TITLEBAR, width: Math.max(0, w - panel), height: Math.max(0, h - TITLEBAR) });
+}
+
+function createMini() {
+  const pos = settings.get('miniPos');
+  const wa = screen.getPrimaryDisplay().workArea;
+  let x = Math.round(wa.x + (wa.width - MINI.w) / 2), y = wa.y + 6;
+  if (pos && screen.getAllDisplays().some((d) => pointIn(d.workArea, pos.x + 40, pos.y + 20))) ({ x, y } = pos);
+  miniWin = new BrowserWindow({
+    width: MINI.w, height: MINI.h, x, y,
+    frame: false, transparent: true, resizable: false, maximizable: false, minimizable: false,
+    fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, show: false, hasShadow: false,
+    backgroundColor: '#00000000', icon: ICON, title: 'Wavelength mini player',
+    webPreferences: {
+      preload: path.join(ROOT, 'src', 'preload', 'app.js'),
+      contextIsolation: true, sandbox: true, backgroundThrottling: false,
+    },
+  });
+  miniWin.setAlwaysOnTop(true, 'screen-saver');
+  miniWin.setVisibleOnAllWorkspaces(true);
+  miniWin.loadFile(path.join(ROOT, 'src', 'renderer', 'mini', 'index.html'));
+  miniWin.on('moved', () => { const [mx, my] = miniWin.getPosition(); settings.set({ miniPos: { x: mx, y: my } }); });
+  miniWin.on('close', (e) => { if (!quitting) { e.preventDefault(); miniWin.hide(); } });
+  miniWin.webContents.on('did-finish-load', () => {
+    toMini('player:state', playerState);
+    if (sessionSummary) toMini('session:summary', sessionSummary);
+    toMini('settings', publicSettings());
+  });
+}
+const pointIn = (r, x, y) => x >= r.x && y >= r.y && x < r.x + r.width && y < r.y + r.height;
+
+// Decide whether the mini player should be on screen.
+function updateMini() {
+  if (!miniWin || miniWin.isDestroyed()) return;
+  const mode = settings.get('miniMode');
+  const mainVisible = mainWin && mainWin.isVisible() && !mainWin.isMinimized();
+  let show = false;
+  if (mode === 'always') show = !miniDismissed;
+  else if (mode === 'playing') show = miniWanted && !miniDismissed;
+  else if (mode === 'background') show = miniWanted && !miniDismissed && !mainVisible;
+  if (miniForced !== null) show = miniForced;
+  if (show && !miniWin.isVisible()) { miniWin.showInactive(); miniWin.setAlwaysOnTop(true, 'screen-saver'); }
+  else if (!show && miniWin.isVisible()) miniWin.hide();
+}
+let miniForced = null; // set by the "toggle mini player" hotkey/button
+function toggleMini() {
+  const vis = miniWin && miniWin.isVisible();
+  miniForced = vis ? false : true;
+  if (!vis) miniDismissed = false;
+  updateMini();
+}
+
+function showMain() {
+  if (!mainWin) return;
+  if (mainWin.isMinimized()) mainWin.restore();
+  mainWin.show(); mainWin.focus();
+}
+function toggleMain() {
+  if (mainWin.isVisible() && !mainWin.isMinimized() && mainWin.isFocused()) mainWin.hide();
+  else showMain();
+}
+
+// ------------------------------------------------------------------ player
+let lastTrackKey = '';
+function onPlayerState(s) {
+  const prev = playerState;
+  playerState = s;
+  toShell('player:state', s);
+  toMini('player:state', s);
+  const key = s.videoId || '';
+  if (key !== lastTrackKey) { lastTrackKey = key; miniDismissed = false; miniForced = null; }
+  // Mini player appears once something actually plays.
+  if (s.playing && (!prev.playing || prev.videoId !== s.videoId || prev.ad !== s.ad)) { miniWanted = true; updateMini(); }
+  if (prev.playing !== s.playing || prev.videoId !== s.videoId || prev.title !== s.title) updateTray();
+}
+
+function runInYtm(code) {
+  if (!ytmView) return Promise.reject(new Error('not ready'));
+  return ytmView.webContents.executeJavaScript(code, true);
+}
+// Bridge config survives page reloads: the bridge reads it when injected.
+const bridgeCfg = {};
+function playerCmd(cmd, ...args) {
+  if (!/^[a-zA-Z]+$/.test(cmd)) return Promise.resolve(null);
+  if (cmd === 'setCfg' && args[0] && typeof args[0] === 'object') Object.assign(bridgeCfg, args[0]);
+  return runInYtm(`window.__wl && window.__wl.cmd.${cmd}(...${JSON.stringify(args)})`).catch(() => null);
+}
+async function ytmCall(fn, ...args) {
+  if (!/^[a-zA-Z]+$/.test(fn)) throw new Error('bad call');
+  for (let i = 0; i < 40; i++) {
+    const ready = await runInYtm('!!(window.__wl && window.ytcfg)').catch(() => false);
+    if (ready) break;
+    if (i === 39) throw new Error('YouTube Music is not loaded yet');
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return runInYtm(`window.__wl.api.${fn}(...${JSON.stringify(args)})`);
+}
+
+// Semantic actions. Volume/like/windows are local; play/next/prev go through
+// the session logic in the shell so listening rooms stay in step.
+function handleAction(name, arg) {
+  switch (name) {
+    case 'volUp': case 'volDown': {
+      const v = Math.max(0, Math.min(100, (playerState.volume ?? 50) + (name === 'volUp' ? 5 : -5)));
+      playerState.volume = v;
+      playerCmd('volume', v); toMini('ui', { volume: v });
+      return;
+    }
+    case 'volume': playerCmd('volume', arg); toMini('ui', { volume: arg }); return;
+    case 'like': playerCmd('like'); return;
+    case 'showFull': toggleMain(); return;
+    case 'openFull': showMain(); return;
+    case 'toggleMini': toggleMini(); return;
+    default: toShell('action', name, arg);
+  }
+}
+
+// ------------------------------------------------------------------ hotkeys
+const MEDIA_KEYS = { MediaPlayPause: 'toggle', MediaNextTrack: 'next', MediaPreviousTrack: 'prev', MediaStop: 'pause' };
+function registerHotkeys() {
+  globalShortcut.unregisterAll();
+  for (const k of Object.keys(hotkeyStatus)) delete hotkeyStatus[k];
+  if (hotkeysSuspended) return;
+  const hk = settings.get('hotkeys') || {};
+  for (const [action, accel] of Object.entries(hk)) {
+    if (!accel) continue;
+    let ok = false;
+    try { ok = globalShortcut.register(accel, () => handleAction(action)); } catch { ok = false; }
+    hotkeyStatus[action] = ok ? 'ok' : 'taken';
+  }
+  if (settings.get('mediaKeys')) {
+    for (const [key, action] of Object.entries(MEDIA_KEYS)) {
+      let ok = false;
+      try { ok = globalShortcut.register(key, () => handleAction(action)); } catch { ok = false; }
+      hotkeyStatus['media:' + key] = ok ? 'ok' : 'taken';
+    }
+  }
+}
+
+// ------------------------------------------------------------------ tray
+function trayImage(size) {
+  const img = nativeImage.createFromPath(ICON);
+  return img.isEmpty() ? img : img.resize({ width: size, height: size, quality: 'best' });
+}
+function createTray() {
+  tray = new Tray(trayImage(16));
+  tray.on('click', showMain);
+  updateTray();
+}
+function updateTray() {
+  if (!tray) return;
+  const s = playerState;
+  const np = s.title ? `${s.title}${s.artist ? ' — ' + s.artist : ''}` : 'Nothing playing';
+  tray.setToolTip(`Wavelength\n${np}`.slice(0, 127));
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: np.length > 60 ? np.slice(0, 57) + '…' : np, enabled: false },
+    { type: 'separator' },
+    { label: s.playing ? 'Pause' : 'Play', click: () => handleAction('toggle') },
+    { label: 'Next', click: () => handleAction('next') },
+    { label: 'Previous', click: () => handleAction('prev') },
+    { type: 'separator' },
+    { label: 'Open Wavelength', click: showMain },
+    { label: miniWin?.isVisible() ? 'Hide mini player' : 'Show mini player', click: () => { toggleMini(); updateTray(); } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => { quitting = true; app.quit(); } },
+  ]));
+}
+
+// ------------------------------------------------------------------ context menu
+async function onYtmContextMenu(_e, params) {
+  const wc = ytmView.webContents;
+  let info = await runInYtm('window.__wl ? window.__wl.api.context() : null').catch(() => null);
+  if (!info && params.linkURL) {
+    try {
+      const u = new URL(params.linkURL);
+      if (u.searchParams.get('v')) info = { kind: 'song', videoId: u.searchParams.get('v'), title: params.linkText };
+      else if (u.searchParams.get('list')) info = { kind: 'list', listId: u.searchParams.get('list'), title: params.linkText };
+    } catch { /* not a URL */ }
+  }
+  const items = [];
+  const label = (t) => (t && t.length > 40 ? t.slice(0, 38) + '…' : t);
+  if (info?.kind === 'song') {
+    items.push(
+      { label: `Play next in Up Next${info.title ? ` — ${label(info.title)}` : ''}`, click: () => toShell('session:add', { videoIds: [info.videoId], where: 'next' }) },
+      { label: 'Add to Up Next', click: () => toShell('session:add', { videoIds: [info.videoId], where: 'end' }) },
+      { type: 'separator' },
+    );
+  } else if (info?.kind === 'list') {
+    items.push(
+      { label: `Add whole ${/^MPRE|^OLAK/.test(info.listId) ? 'album' : 'playlist'} to Up Next`, click: () => toShell('session:add', { listId: info.listId, where: 'end' }) },
+      { label: 'Shuffle into Up Next', click: () => toShell('session:add', { listId: info.listId, where: 'end', shuffle: true }) },
+      { type: 'separator' },
+    );
+  }
+  if (params.isEditable) items.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { type: 'separator' });
+  else if (params.selectionText) items.push({ role: 'copy' }, { type: 'separator' });
+  if (params.linkURL) items.push({ label: 'Copy link', click: () => clipboard.writeText(params.linkURL) });
+  items.push(
+    { label: 'Back', enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
+    { label: 'Reload', click: () => wc.reload() },
+  );
+  Menu.buildFromTemplate(items).popup({ window: mainWin });
+}
+
+// ------------------------------------------------------------------ IPC
+const publicSettings = () => ({ ...settings.get(), hotkeyStatus: { ...hotkeyStatus }, defaults: { hotkeys: DEFAULT_HOTKEYS } });
+
+ipcMain.on('wl:bridge', (e) => { e.returnValue = { code: BRIDGE, cfg: { ...bridgeCfg, adblock: settings.get('adblock') } }; });
+ipcMain.on('wl:signin-compat', (e) => { e.returnValue = settings.get('signinCompat') ? SIGNIN_UA : null; });
+ipcMain.on('ytm:msg', (e, type, data) => {
+  if (!ytmView || e.sender !== ytmView.webContents) return;
+  if (type === 'state') onPlayerState(data || {});
+  else toShell('player:event', type, data);
+});
+ipcMain.on('player:cmd', (_e, cmd, ...args) => playerCmd(cmd, ...args));
+ipcMain.handle('ytm:call', (_e, fn, ...args) => ytmCall(fn, ...args));
+ipcMain.on('ytm:browse', (_e, id) => { playerCmd('browse', id); showMain(); });
+ipcMain.on('ytm:reload', () => ytmView?.webContents.loadURL(YTM_URL));
+ipcMain.on('action', (_e, name, arg) => handleAction(name, arg));
+ipcMain.on('session:summary', (_e, s) => { sessionSummary = s; toMini('session:summary', s); });
+ipcMain.handle('settings:get', () => publicSettings());
+ipcMain.handle('settings:set', async (_e, patch) => {
+  const before = settings.get();
+  const prevAd = before.adblock, prevLogin = before.openAtLogin;
+  if (patch.hotkeys) patch.hotkeys = { ...settings.get('hotkeys'), ...patch.hotkeys };
+  settings.set(patch);
+  if ('hotkeys' in patch || 'mediaKeys' in patch) registerHotkeys();
+  if ('openAtLogin' in patch && patch.openAtLogin !== prevLogin) {
+    app.setLoginItemSettings({ openAtLogin: !!patch.openAtLogin, args: ['--hidden'] });
+  }
+  if ('adblock' in patch && patch.adblock !== prevAd) {
+    playerCmd('setCfg', { adblock: !!patch.adblock });
+    if (patch.adblock) enableAdblock(ytmView.webContents.session, app.getPath('userData')).catch(() => {});
+    else disableAdblock();
+  }
+  if ('miniMode' in patch) { miniForced = null; miniDismissed = false; updateMini(); }
+  if ('miniPos' in patch && !patch.miniPos && miniWin) {
+    const wa = screen.getPrimaryDisplay().workArea;
+    miniWin.setPosition(Math.round(wa.x + (wa.width - MINI.w) / 2), wa.y + 6);
+    settings.set({ miniPos: null });
+  }
+  const pub = publicSettings();
+  toMini('settings', pub); toShell('settings', pub);
+  return pub;
+});
+ipcMain.handle('saved:list', () => saved.get('playlists'));
+ipcMain.handle('saved:save', (_e, pl) => {
+  const list = saved.get('playlists').slice();
+  const item = { id: pl.id || crypto.randomUUID(), name: String(pl.name || 'Untitled').slice(0, 100), tracks: (pl.tracks || []).slice(0, 2000), createdAt: pl.createdAt || Date.now(), updatedAt: Date.now() };
+  const i = list.findIndex((p) => p.id === item.id);
+  if (i >= 0) list[i] = item; else list.unshift(item);
+  saved.replace('playlists', list);
+  return item;
+});
+ipcMain.handle('saved:delete', (_e, id) => { saved.replace('playlists', saved.get('playlists').filter((p) => p.id !== id)); return true; });
+ipcMain.handle('session:state', (_e, s) => { if (s === undefined) return saved.get('session'); saved.replace('session', s); return true; });
+ipcMain.on('win:layout', (_e, l) => {
+  layoutState = { ...layoutState, ...l };
+  if ('panel' in l) settings.set({ panelOpen: l.panel > 0 });
+  layout();
+});
+ipcMain.on('win:show-main', showMain);
+ipcMain.on('mini:hide', () => { miniDismissed = true; miniForced = null; updateMini(); updateTray(); });
+ipcMain.on('clipboard:write', (_e, t) => clipboard.writeText(String(t)));
+ipcMain.on('open-external', (_e, url) => { if (/^https:\/\//.test(url)) shell.openExternal(url); });
+ipcMain.on('hotkeys:suspend', (_e, on) => { hotkeysSuspended = !!on; registerHotkeys(); });
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), electron: process.versions.electron }));
+
+// ------------------------------------------------------------------ lifecycle
+app.on('second-instance', showMain);
+app.on('before-quit', () => { quitting = true; settings.flush(); saved.flush(); });
+app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('window-all-closed', () => { if (quitting) app.quit(); });
+
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+  createMain();
+  createMini();
+  createTray();
+  registerHotkeys();
+  if (TEST) {
+    const ctx = { app, mainWin, miniWin, ytmView, playerCmd, ytmCall, handleAction, settings, saved,
+      getPlayerState: () => playerState, getSummary: () => sessionSummary, hotkeyStatus, runInYtm };
+    require(path.resolve(process.env.WL_TEST_SCRIPT))(ctx).then(
+      (ok) => { console.log(ok === false ? 'WLTEST FAIL' : 'WLTEST PASS'); quitting = true; app.exit(ok === false ? 1 : 0); },
+      (err) => { console.log('WLTEST FAIL', err && err.stack); quitting = true; app.exit(1); },
+    );
+  }
+});
