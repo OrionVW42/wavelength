@@ -1,4 +1,4 @@
-// Wavelength — YouTube Music desktop player with mini player, hotkeys,
+// Wavelength â€” YouTube Music desktop player with mini player, hotkeys,
 // ad blocking and listen-together rooms.
 const {
   app, BrowserWindow, WebContentsView, ipcMain, globalShortcut, Tray, Menu,
@@ -64,7 +64,8 @@ const settings = new JsonStore(path.join(app.getPath('userData'), 'settings.json
   discordEnabled: false,     // built-in Discord bot on/off
   discordToken: '',
   discordGuildId: '',
-  discordVolume: 100,
+  discordVolume: 50,
+  discordPlayLocal: true,    // also play on this PC while the bot is in voice        // full-level music is loud next to voices
 });
 const saved = new JsonStore(path.join(app.getPath('userData'), 'saved.json'), { playlists: [], session: null });
 settings.save(); // persist the generated identity on first run
@@ -466,14 +467,14 @@ let trayKey = '';
 function updateTray() {
   if (!tray) return;
   const s = playerState;
-  const np = s.title ? `${s.title}${s.artist ? ' — ' + s.artist : ''}` : 'Nothing playing';
+  const np = s.title ? `${s.title}${s.artist ? ' â€” ' + s.artist : ''}` : 'Nothing playing';
   const ready = updater && updater.status().ready;
   const key = JSON.stringify([np, !!s.playing, !!miniWin?.isVisible(), ready && ready.version]);
   if (key === trayKey) return;
   trayKey = key;
   tray.setToolTip(`Wavelength\n${np}`.slice(0, 127));
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: np.length > 60 ? np.slice(0, 57) + '…' : np, enabled: false },
+    { label: np.length > 60 ? np.slice(0, 57) + 'â€¦' : np, enabled: false },
     { type: 'separator' },
     { label: s.playing ? 'Pause' : 'Play', click: () => handleAction('toggle') },
     { label: 'Next', click: () => handleAction('next') },
@@ -502,7 +503,7 @@ function onYtmContextMenu(_e, params) {
 const publicSettings = () => ({ ...settings.get(), hotkeyStatus: { ...hotkeyStatus }, defaults: { hotkeys: DEFAULT_HOTKEYS }, version: VERSION });
 
 ipcMain.on('wl:bridge', (e) => {
-  e.returnValue = { code: BRIDGE, cfg: { ...bridgeCfg, adblock: settings.get('adblock'), dataSaver: settings.get('dataSaver') } };
+  e.returnValue = { code: BRIDGE, cfg: { ...bridgeCfg, adblock: settings.get('adblock'), dataSaver: settings.get('dataSaver'), playLocal: settings.get('discordPlayLocal') !== false } };
 });
 ipcMain.on('wl:signin-compat', (e) => { e.returnValue = settings.get('signinCompat') ? SIGNIN_UA : null; });
 ipcMain.on('ytm:msg', (e, type, data) => {
@@ -547,6 +548,7 @@ ipcMain.handle('settings:set', async (_e, patch) => {
   if ('autoUpdate' in patch && patch.autoUpdate && updater) updater.run();
   if (['discordEnabled', 'discordToken', 'discordGuildId'].some((k) => k in patch && patch[k] !== before[k])) applyDiscord();
   if ('discordVolume' in patch && discord) discord.setVolume(patch.discordVolume);
+  if ('discordPlayLocal' in patch) playerCmd('setCfg', { playLocal: patch.discordPlayLocal !== false });
   const pub = publicSettings();
   toMini('settings', pub); toShell('settings', pub);
   return pub;

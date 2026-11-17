@@ -81,6 +81,7 @@
       liked: like === 'LIKE',
       video: !artMode(),
       dataSaver: !!cfg.dataSaver,
+      tap: tap && tap.on ? tap.info() : null,
       volume: vol, muted,
       ad: isAd(),
       adLeft: isAd() && v && isFinite(v.duration) ? Math.max(0, v.duration - v.currentTime) : 0,
@@ -215,19 +216,52 @@
     if (tap) { try { tap.ctx.close(); } catch { /* closed */ } tap = null; }
     const ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'playback' });
     const src = ctx.createMediaElementSource(v);
-    src.connect(ctx.destination); // keep playing through the speakers
+    // The element's own volume would also scale what Discord gets (a host at
+    // 9% volume sent near-silence). So the element plays at full level and the
+    // host's volume is applied only on the path to their speakers: YouTube
+    // Music still reads and writes `volume` as usual, it just lands here.
+    // Same for mute: muting Wavelength (or the ad blocker muting an ad) only
+    // silences the speakers; Discord is silenced for ads separately.
+    const local = ctx.createGain();
+    const proto = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'volume');
+    const protoMuted = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
+    let wanted = proto.get.call(v), wantedMuted = protoMuted.get.call(v);
+    const applyLocal = () => { local.gain.value = (wantedMuted || (cfg.playLocal === false && t.on)) ? 0 : wanted; };
+    Object.defineProperty(v, 'volume', {
+      configurable: true,
+      get() { return wanted; },
+      set(x) { wanted = Math.max(0, Math.min(1, +x || 0)); applyLocal(); },
+    });
+    Object.defineProperty(v, 'muted', {
+      configurable: true,
+      get() { return wantedMuted; },
+      set(x) { wantedMuted = !!x; applyLocal(); },
+    });
+    proto.set.call(v, 1); protoMuted.set.call(v, false);
+    // YouTube's player also sets volume / mute through the native setters when
+    // a song loads, which bypasses the properties above. Catch that too: take
+    // what it wanted for the speakers and put the element back to full.
+    v.addEventListener('volumechange', () => {
+      const real = proto.get.call(v), realMuted = protoMuted.get.call(v);
+      let changed = false;
+      if (Math.abs(real - 1) > 1e-6) { wanted = real; proto.set.call(v, 1); changed = true; }
+      if (realMuted) { wantedMuted = true; protoMuted.set.call(v, false); changed = true; }
+      if (changed) applyLocal();
+    });
+    src.connect(local); local.connect(ctx.destination); // keep playing through the speakers
     const sp = ctx.createScriptProcessor(4096, 2, 2);
     const sink = ctx.createGain(); sink.gain.value = 0; // processor must reach the output to run
     src.connect(sp); sp.connect(sink); sink.connect(ctx.destination);
-    const t = { el: v, ctx, on: false };
+    const t = { el: v, ctx, on: false, applyLocal: () => applyLocal(), info: () => ({ real: Math.round(proto.get.call(v) * 1000) / 1000, wanted: Math.round(wanted * 1000) / 1000, local: Math.round(local.gain.value * 1000) / 1000, muted: wantedMuted, playLocal: cfg.playLocal !== false, ctx: ctx.state, sameEl: video() === v }) };
     sp.onaudioprocess = (e) => {
       if (!t.on) return;
       const ib = e.inputBuffer;
       const L = ib.getChannelData(0), R = ib.numberOfChannels > 1 ? ib.getChannelData(1) : L;
-      // The element's own volume is already applied here; undo it so Discord
-      // gets full level whatever the host's local volume (the bot has its own).
-      const ev = t.el.volume;
-      const g = t.el.muted ? 0 : ev > 0.01 ? Math.min(1 / ev, 60) : 0;
+      // Full level for Discord: the element normally plays at 1.0 (see above);
+      // if it's briefly lower, undo that here. Muted (ads) stays silent. The
+      // bot has its own volume control.
+      const real = proto.get.call(t.el);
+      const g = isAd() || protoMuted.get.call(t.el) ? 0 : real > 0.0005 ? 1 / real : 0;
       const out = new Int16Array(L.length * 2);
       for (let i = 0, j = 0; i < L.length; i++, j += 2) {
         let l = L[i] * g, r = R[i] * g;
@@ -237,6 +271,7 @@
       }
       send('pcm', out);
     };
+    applyLocal();
     tap = t;
     return t;
   }
@@ -355,6 +390,7 @@
       if (!on && !tap) return true;
       const t = ensureTap(); if (!t) return false;
       t.on = !!on;
+      t.applyLocal();
       if (t.ctx.state === 'suspended') t.ctx.resume();
       return true;
     },
@@ -365,7 +401,7 @@
       pushSoon();
       return !artMode();
     },
-    setCfg(c) { Object.assign(cfg, c); if ('dataSaver' in c || 'videoFlip' in c) applySaver(true); pushSoon(); },
+    setCfg(c) { Object.assign(cfg, c); if ('dataSaver' in c || 'videoFlip' in c) applySaver(true); if ('playLocal' in c && tap) tap.applyLocal(); pushSoon(); },
     state,
   };
 
