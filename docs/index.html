@@ -132,7 +132,7 @@
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <span class="pill"><i></i>Version 1.1 for Windows · free</span>
+  <span class="pill"><i></i>Version 1.2 for Windows · free</span>
   <h1>YouTube Music,<br><span class="g">on the same wavelength.</span></h1>
   <p class="lede">A desktop player for YouTube Music with a mini player that floats over everything, global hotkeys, a built-in ad blocker, and rooms where your friends hear the same song at the same moment.</p>
   <div class="cta">
@@ -174,7 +174,7 @@
 <section id="together" class="alt"><div class="wrap">
   <div class="eyebrow">Listen together</div>
   <h2>One queue. Same song. Same second.</h2>
-  <p class="sub">Rooms connect your computers directly, with no account to make and no server to run. Everyone plays through their own YouTube Music, and Wavelength keeps them in step to within a fraction of a second.</p>
+  <p class="sub">Rooms connect your computers directly, and when your networks won't allow that, through an encrypted relay. No account to make, no server to run. Everyone plays through their own YouTube Music, and Wavelength keeps them in step to within a fraction of a second.</p>
   <div class="steps">
     <div class="step"><div class="n">1</div><h3>Start a room</h3><p>Open <b>Up Next → Start a room</b> and hit <b>Copy invite</b>. You get a code like <span class="code">K7Q-M2X</span>.</p></div>
     <div class="step"><div class="n">2</div><h3>Friends join</h3><p>They paste the code into <b>Join</b>. Their player jumps to your song and stays in sync by itself.</p></div>
@@ -267,9 +267,9 @@
     <details><summary>Does closing the window stop the music?</summary>
       <p>No. Wavelength keeps playing in the system tray. Right-click the tray icon to quit. You can turn this off in Settings.</p></details>
     <details><summary>How do rooms connect? Does anything go through a server?</summary>
-      <p>A free public matchmaking server (PeerJS) introduces the computers, then they talk to each other directly. Only room messages travel between you: song IDs, the queue, play/pause and names. No music is streamed between computers; each person plays from YouTube Music themselves.</p></details>
+      <p>A free public matchmaking server (PeerJS) introduces the computers, then they talk to each other directly. If a direct connection isn't possible (strict routers, phone hotspots, Starlink, school or work networks), Wavelength switches to a relay within a few seconds: room messages go through several free public MQTT servers at once, encrypted with a key made from the room code, so the servers can't read them. Only room messages travel between you: song IDs, the queue, play/pause and names. No music is streamed between computers; each person plays from YouTube Music themselves.</p></details>
     <details><summary>A friend can't join my room.</summary>
-      <p>Check the code and that your room is still open. On some strict school or work networks two computers can't reach each other directly; trying from a home network usually fixes it.</p></details>
+      <p>Check the code, that your room is still open, and that you're both on version 1.2 or newer (Settings shows the version). Since 1.2, networks that block direct connections fall back to the encrypted relay automatically. If joining still fails, both of you can set <b>Settings → Room connection → Always relay</b>.</p></details>
     <details><summary>Will the ad blocker always work?</summary>
       <p>It works today, but YouTube changes how ads work often. If an ad ever gets through, Wavelength mutes it, presses Skip as soon as it can, and shows a countdown so you know the music is coming.</p></details>
     <details><summary>How does it update?</summary>

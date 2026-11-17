@@ -32,7 +32,7 @@
   // ------------------------------------------------------------ state
   let settings = await api.getSettings();
   const me = { id: settings.id, name: settings.name, color: settings.color };
-  const session = new Session(api, me, { peerServer: settings.peerServer });
+  const session = new Session(api, me, { peerServer: settings.peerServer, transport: settings.roomTransport || 'auto' });
   window.__session = session; // handy for debugging / tests
   let player = {};
   let panelOpen = settings.panelOpen !== false;
@@ -172,7 +172,7 @@
     }
     if ('videoOn' in u) renderVideoBtn(u.videoOn);
   });
-  api.onSettings((s) => { settings = s; me.name = s.name; me.color = s.color; session.opts.peerServer = s.peerServer; });
+  api.onSettings((s) => { settings = s; me.name = s.name; me.color = s.color; session.opts.peerServer = s.peerServer; session.opts.transport = s.roomTransport || 'auto'; });
   api.onSessionAdd((req) => handleAddRequest(req));
 
   session.on((kind, data) => {
@@ -352,7 +352,7 @@
     return `<div class="member">
       <div class="avatar" style="background:${esc(m.color)}">${esc(initial(m.name))}${m.isHost ? `<span class="crown" title="Host">${ICONS.crown}</span>` : ''}</div>
       <div class="m-meta">
-        <div class="m-name">${esc(m.name)}${you ? '<span class="tag">you</span>' : ''}${!m.isHost && m.sync === false ? '<span class="tag">solo</span>' : ''}</div>
+        <div class="m-name">${esc(m.name)}${you ? '<span class="tag">you</span>' : ''}${!m.isHost && m.sync === false ? '<span class="tag">solo</span>' : ''}${m.via === 'relay' ? '<span class="tag" title="Connected through the encrypted relay">relay</span>' : ''}</div>
         <div class="m-np">${npLine}</div>
       </div></div>`;
   }
@@ -382,7 +382,7 @@
     }
     const host = s.members.find((m) => m.isHost);
     const warn = s.status !== 'live';
-    const stateText = warn ? 'Reconnecting to the room…' : s.role === 'host' ? 'Live · you\'re the host' : `Live · hosted by ${esc(host ? host.name : 'host')}`;
+    const stateText = warn ? 'Reconnecting to the room…' : s.role === 'host' ? 'Live · you\'re the host' : `Live · hosted by ${esc(host ? host.name : 'host')}${s.via === 'relay' ? ' · via relay' : ''}`;
     card.innerHTML = `
       <div class="room-state ${warn ? 'warn' : ''}"><span class="dot"></span>${stateText}</div>
       <div class="code-row"><span class="code">${esc(Session.prettyCode(s.code))}</span>

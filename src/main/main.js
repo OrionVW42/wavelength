@@ -59,6 +59,7 @@ const settings = new JsonStore(path.join(app.getPath('userData'), 'settings.json
   panelOpen: true,
   bounds: null,
   peerServer: '',            // optional self-hosted PeerJS server "host:port"
+  roomTransport: 'auto',     // auto | relay | direct
 });
 const saved = new JsonStore(path.join(app.getPath('userData'), 'saved.json'), { playlists: [], session: null });
 settings.save(); // persist the generated identity on first run

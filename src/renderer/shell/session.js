@@ -318,25 +318,63 @@
     }
     static prettyCode(c) { return c ? c.slice(0, 3) + '-' + c.slice(3) : ''; }
 
+    // Hosting listens two ways at once: direct (PeerJS / WebRTC) and through
+    // the encrypted relay. The room is live as soon as either is ready.
     host(attempt = 0) {
-      if (this.role !== 'solo') return;
+      if (this.role !== 'solo' || (this.status === 'connecting' && attempt === 0)) return;
       this.status = 'connecting'; this.emit('change');
       const code = Session.newCode();
-      const peer = new Peer(PEER_PREFIX + code, this._peerOptions());
-      this.peer = peer;
-      peer.on('open', () => {
+      const token = ++this._hostToken || (this._hostToken = 1);
+      let live = false, directDown = false, relayDown = false, relayUp = false;
+      const stale = () => token !== this._hostToken;
+      const goLive = () => {
+        if (live || stale()) return;
+        live = true;
         this.role = 'host'; this.code = code; this.status = 'live';
         this.members = [{ ...this.memberSelf(), isHost: true, sync: true, np: this._np() }];
         this.changed();
-        this.toast('Room is live — share the code with friends.');
-      });
+        this.toast('Room is live. Share the code with friends.');
+      };
+      const giveUp = () => {
+        if (live || stale()) return;
+        this._teardown();
+        this.toast('Can\'t reach the room servers. Check your internet connection and try again.', { error: true });
+      };
+
+      if (this.opts.transport !== 'direct' && typeof Relay !== 'undefined') {
+        const relay = new Relay(code);
+        this.relay = relay;
+        relay.start().then(() => {
+          if (stale() || this.relay !== relay) { relay.close(); return; }
+          relay.listenHost((conn) => this._acceptGuest(conn));
+          relayUp = true;
+          if (directDown || this.opts.transport === 'relay') goLive();
+        }, () => { relayDown = true; if (directDown) giveUp(); });
+      } else relayDown = true;
+
+      if (this.opts.transport === 'relay') { directDown = true; return; }
+      const peer = new Peer(PEER_PREFIX + code, this._peerOptions());
+      this.peer = peer;
+      const directFailed = () => { directDown = true; if (relayUp) goLive(); else if (relayDown) giveUp(); };
+      const slowT = setTimeout(() => { if (!live) directFailed(); }, 10000);
+      peer.on('open', () => { clearTimeout(slowT); if (stale()) return; goLive(); });
       peer.on('connection', (conn) => this._acceptGuest(conn));
       peer.on('disconnected', () => { if (this.role === 'host' && !peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch { /* destroyed */ } }, 1000); });
       peer.on('error', (err) => {
-        if (err.type === 'unavailable-id' && attempt < 3) { peer.destroy(); this.peer = null; this.role = 'solo'; return this.host(attempt + 1); }
-        if (this.role === 'host' && ['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) return; // reconnect handles it
+        if (stale()) return;
+        if (err.type === 'unavailable-id' && !live && attempt < 3) {
+          // Code already taken on the server: start over with a new one.
+          clearTimeout(slowT); this._hostToken++;
+          try { peer.destroy(); } catch { /* gone */ }
+          if (this.relay) { this.relay.close(); this.relay = null; }
+          this.peer = null; this.status = 'idle';
+          return this.host(attempt + 1);
+        }
+        if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
+          if (!live) { clearTimeout(slowT); directFailed(); }
+          return; // once live, reconnects on its own and the relay keeps the room up
+        }
         console.warn('[room] host error', err.type, err.message);
-        if (this.role !== 'host') { this._teardown(); this.toast(this._errText(err), { error: true }); }
       });
     }
 
@@ -368,7 +406,7 @@
           const member = {
             id: String(m.id || conn.peer).slice(0, 64), peerId: conn.peer,
             name: String(m.name || 'Guest').slice(0, 32), color: /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#7c6cff',
-            isHost: false, sync: msg.sync !== false, np: null,
+            isHost: false, sync: msg.sync !== false, np: null, via: conn.via === 'relay' ? 'relay' : 'direct',
           };
           this.members = this.members.filter((x) => x.peerId !== conn.peer && x.id !== member.id);
           // A rejoining member with the same id replaces their old connection.
@@ -406,7 +444,7 @@
     _roomMsg() {
       return {
         type: 'room', code: this.code, guestsControl: this.guestsControl,
-        members: this.members.map(({ peerId, ...m }) => m),
+        members: this.members.map(({ peerId, ...m }) => m), via: undefined,
         queue: this.queue, history: this.history.slice(-30), current: this.current,
       };
     }
@@ -446,45 +484,66 @@
       if (this.role === 'guest' && attempt === 0) this.leave(true);
       this.status = attempt ? 'reconnecting' : 'connecting'; this.code = code; this.emit('change');
       if (!this._soloBackup) this._soloBackup = { queue: this.queue, history: this.history, current: this.current };
-      this._attempt = attempt;
-      const fresh = !(this.peer && !this.peer.destroyed);
-      const peer = fresh ? new Peer(this._peerOptions()) : this.peer;
-      this.peer = peer;
-      if (fresh) this._wireGuestPeer(peer);
-      const go = () => {
-        const conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
-        this.hostConn = conn;
-        const failT = setTimeout(() => { if (!conn.open) { try { conn.close(); } catch { /* */ } this._joinFailed(code, attempt, 'timeout'); } }, 15000);
-        conn.on('open', () => {
-          clearTimeout(failT);
-          this.role = 'guest'; this.status = 'live'; this._clock = [];
-          conn.send({ type: 'hello', member: this.memberSelf(), sync: this.sync });
-          for (let i = 0; i < 5; i++) setTimeout(() => this._ping(), i * 400);
-          this._lastStatus = '';
-          this.changed();
-        });
+      // Try a direct connection first; if it isn't up within a few seconds
+      // (or fails outright), go through the encrypted relay. First one wins.
+      const token = ++this._joinToken || (this._joinToken = 1);
+      const transport = this.opts.transport || 'auto';
+      let done = false, relayStarted = false, failures = 0, why = 'unreachable';
+      const attempts = (transport === 'auto' ? 2 : 1);
+      const stale = () => token !== this._joinToken;
+      const finish = (conn, via) => {
+        if (done || stale()) { try { conn.close(); } catch { /* */ } return; }
+        done = true; clearTimeout(relayT);
+        if (via === 'relay' && this.peer) { try { this.peer.destroy(); } catch { /* */ } this.peer = null; }
+        if (via === 'direct' && this.relay) { this.relay.close(); this.relay = null; }
+        this.hostConn = conn; this.via = via;
+        this.role = 'guest'; this.status = 'live'; this._clock = [];
         conn.on('data', (msg) => this._onGuestData(msg));
-        conn.on('close', () => { clearTimeout(failT); if (this.hostConn === conn && this.role === 'guest' && !this._leaving) this._lostHost(code); });
+        conn.on('close', () => { if (this.hostConn === conn && this.role === 'guest' && !this._leaving) this._lostHost(code); });
         conn.on('error', () => {});
+        conn.send({ type: 'hello', member: this.memberSelf(), sync: this.sync });
+        for (let i = 0; i < 5; i++) setTimeout(() => this._ping(), i * 400);
+        this._lastStatus = '';
+        this.changed();
       };
-      if (peer.open) go(); else { peer.once('open', go); }
-    }
-    _wireGuestPeer(peer) {
-      peer.on('error', (err) => {
-        if (this.peer !== peer) return;
-        if (err.type === 'peer-unavailable') {
-          if (this.role === 'guest' && this.status === 'reconnecting') return this._joinFailed(this.code, this._attempt, 'gone');
-          this._teardown();
-          this.toast('No room with that code. Check it, or ask the host if their room is still open.', { error: true });
-          return;
+      const fail = (reason) => {
+        if (done || stale()) return;
+        if (reason === 'gone') why = 'gone';
+        failures++;
+        if (failures >= attempts) { done = true; clearTimeout(relayT); this._joinFailed(code, attempt, why); return; }
+        startRelay();
+      };
+      const startRelay = () => {
+        if (relayStarted || transport === 'direct' || typeof Relay === 'undefined') return;
+        relayStarted = true;
+        if (this.relay) this.relay.close();
+        const relay = new Relay(code);
+        this.relay = relay;
+        relay.start()
+          .then(() => (stale() ? Promise.reject(new Error('stale')) : relay.connectToHost(14000)))
+          .then((conn) => finish(conn, 'relay'), (e) => { if (this.relay === relay && !done) { relay.close(); this.relay = null; } fail(e.message === 'no-host' ? 'gone' : 'unreachable'); });
+      };
+      const relayT = setTimeout(startRelay, transport === 'relay' ? 0 : 4000);
+
+      if (transport !== 'relay') {
+        const peer = this.peer && !this.peer.destroyed ? this.peer : new Peer(this._peerOptions());
+        if (peer !== this.peer) {
+          this.peer = peer;
+          peer.on('disconnected', () => { if (this.peer === peer && !peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch { /* */ } }, 1000); });
         }
-        if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
-          if (this.role === 'guest') return;
-          this._teardown();
-          this.toast(this._errText(err), { error: true });
-        }
-      });
-      peer.on('disconnected', () => { if (this.peer === peer && !peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch { /* */ } }, 1000); });
+        peer.on('error', (err) => {
+          if (this.peer !== peer || done || stale()) return;
+          if (err.type === 'peer-unavailable') { fail('gone'); return; }
+          if (['network', 'server-error', 'socket-error', 'socket-closed', 'browser-incompatible'].includes(err.type)) fail('unreachable');
+        });
+        const go = () => {
+          if (done || stale()) return;
+          const conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
+          conn.on('open', () => finish(conn, 'direct'));
+          setTimeout(() => { if (!conn.open && !done && !stale()) { try { conn.close(); } catch { /* */ } fail('unreachable'); } }, 15000);
+        };
+        if (peer.open) go(); else peer.once('open', go);
+      }
     }
     _joinFailed(code, attempt, why) {
       if (this.role === 'guest' && attempt < 5) {
@@ -492,7 +551,9 @@
         return;
       }
       this._teardown();
-      this.toast(why === 'gone' ? 'The room has closed.' : 'Couldn\'t reach that room. The host may be offline, or your networks can\'t connect directly.', { error: true });
+      this.toast(why === 'gone'
+        ? 'No room with that code. Check it, or ask the host if their room is still open.'
+        : 'Couldn\'t reach that room. Check your internet connection, or ask the host if Wavelength is still open.', { error: true });
     }
     _lostHost(code) {
       this.status = 'reconnecting'; this.emit('change');
@@ -608,6 +669,9 @@
       for (const { conn } of this.conns.values()) { try { conn.close(); } catch { /* */ } }
       this.conns.clear();
       try { this.peer && this.peer.destroy(); } catch { /* */ }
+      if (this.relay) { this.relay.close(); this.relay = null; }
+      this._joinToken = (this._joinToken || 0) + 1; this._hostToken = (this._hostToken || 0) + 1;
+      this.via = null;
       this.peer = null; this.hostConn = null; this.hostPb = null; this._lastPb = null;
       this.role = 'solo'; this.status = 'idle'; this.code = null; this.members = [];
       if (wasGuest && this._soloBackup) {

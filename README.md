@@ -62,9 +62,12 @@ It installs for your Windows user only (no admin prompt) and opens when done.
 Everyone needs their own copy of Wavelength. Friends don't need YouTube Music
 Premium or even an account: playback works signed out too.
 
-Rooms connect your computers directly (peer-to-peer). In rare cases (strict
-company or school networks) two computers can't reach each other, and joining
-says it couldn't reach the room.
+Rooms connect your computers directly (peer-to-peer). When your networks can't
+connect directly (strict routers, phone hotspots, Starlink, school or work
+networks), Wavelength switches to an encrypted relay within a few seconds: room
+messages go through free public MQTT servers, encrypted with a key made from the
+room code. Everyone in a room needs version 1.2 or newer for the relay. If
+joining still fails, set **Settings → Room connection → Always relay** on both PCs.
 
 ## Notes
 

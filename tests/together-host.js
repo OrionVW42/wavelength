@@ -7,6 +7,7 @@ module.exports = async (ctx) => {
   const songs = (await ctx.ytmCall('search', 'queen greatest hits songs')).filter((s) => s.kind === 'Song').slice(0, 3);
   check('found songs to queue', songs.length === 3, songs.map((s) => s.title).join(' | '));
 
+  if (process.env.WL_HOST_TRANSPORT) await shell(ctx, `window.__session.opts.transport = ${JSON.stringify(process.env.WL_HOST_TRANSPORT)}; 0`);
   await shell(ctx, 'window.__session.host()');
   const code = await waitFor(() => shell(ctx, "window.__session.status === 'live' && window.__session.code"), 20000);
   check('room opens on the public server', !!code, code || 'no code');

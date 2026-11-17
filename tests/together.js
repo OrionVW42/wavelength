@@ -14,9 +14,9 @@ fs.mkdirSync(sharedDir);
 
 function run(role) {
   return new Promise((resolve) => {
-    const p = spawn(electron, ['.'], {
+    const p = spawn(process.env.WL_EXE || electron, process.env.WL_EXE ? [] : ['.'], {
       cwd: root,
-      env: { ...process.env, WL_TEST_SCRIPT: `tests/together-${role}.js`, WL_USERDATA: path.join(base, role), WL_SHARED: sharedDir },
+      env: { ...process.env, WL_TEST_SCRIPT_DIR: __dirname, WL_TRANSPORT: role === 'guest' ? (process.env.WL_GUEST_TRANSPORT || '') : '', WL_TEST_SCRIPT: path.join(__dirname, `together-${role}.js`), WL_USERDATA: path.join(base, role), WL_SHARED: sharedDir },
     });
     let pass = false;
     const onData = (d) => {

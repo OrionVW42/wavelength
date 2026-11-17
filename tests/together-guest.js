@@ -10,9 +10,13 @@ module.exports = async (ctx) => {
 
   const code = (await waitFor(() => readJson('code.json'), 60000))?.code;
   if (!check('got the room code', !!code)) return done(false);
+  if (process.env.WL_TRANSPORT) await shell(ctx, `window.__session.opts.transport = ${JSON.stringify(process.env.WL_TRANSPORT)}; 0`);
+  const t0 = Date.now();
   await shell(ctx, `window.__session.join(${JSON.stringify(code)})`);
   const live = await waitFor(() => shell(ctx, "window.__session.role === 'guest' && window.__session.status === 'live'"), 30000);
   if (!check('joined the room by code', !!live)) return done(false);
+  const via = await shell(ctx, 'window.__session.via');
+  check(`connected ${via} in ${((Date.now() - t0) / 1000).toFixed(1)}s`, !process.env.WL_EXPECT_VIA || via === process.env.WL_EXPECT_VIA, `expected ${process.env.WL_EXPECT_VIA || 'any'}`);
 
   const host = () => readJson('host.json');
   const same = await waitFor(() => { const h = host(), s = ctx.getPlayerState(); return h && s.videoId === h.videoId && s.playing && !s.ad; }, 150000);

@@ -113,6 +113,8 @@
           <label class="switch"><input type="checkbox" id="st-login" ${s.openAtLogin ? 'checked' : ''}><span></span></label></div>
         <div class="s-row"><div><div class="lbl">Google sign-in compatibility</div><div class="desc">Helps Google's sign-in page accept Wavelength. Leave on unless sign-in misbehaves.</div></div>
           <label class="switch"><input type="checkbox" id="st-compat" ${s.signinCompat ? 'checked' : ''}><span></span></label></div>
+        <div class="s-row"><div><div class="lbl">Room connection</div><div class="desc">Automatic tries a direct connection, then switches to an encrypted relay when your networks can't connect directly. "Always relay" works on almost any network.</div></div>
+          <div class="seg" id="st-transport">${[['auto', 'Automatic'], ['relay', 'Always relay'], ['direct', 'Direct only']].map(([v, l]) => `<button data-v="${v}" class="${(s.roomTransport || 'auto') === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
         <div class="s-row"><div><div class="lbl">Room server <span class="muted">(advanced)</span></div><div class="desc">Leave blank to use the free public PeerJS server. Everyone in a room must use the same one.</div></div>
           <input class="input" id="st-peer" style="width:220px" placeholder="default" value="${esc(s.peerServer || '')}" spellcheck="false"></div>
       </div>
@@ -171,6 +173,11 @@
     bindSwitch('#st-login', 'openAtLogin');
     bindSwitch('#st-compat', 'signinCompat');
     $('#st-peer').addEventListener('change', (e) => save({ peerServer: e.target.value.trim() }));
+    $('#st-transport').addEventListener('click', async (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      await save({ roomTransport: b.dataset.v });
+      root.querySelectorAll('#st-transport button').forEach((x) => x.classList.toggle('on', x === b));
+    });
 
     // ---------------------------------------------------- hotkey recorder
     const rerender = () => { const top = root.scrollTop; renderSettings(root, s, api, { onSaved, toast }); root.scrollTop = top; };
