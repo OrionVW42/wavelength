@@ -35,6 +35,9 @@
     panel: s('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>'),
     volume: s('<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>'),
     logout: s('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'),
+    video: s('<rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3.5v11L16 14"/>'),
+    videoOff: s('<path d="M10.7 6H14a2 2 0 0 1 2 2v3.3l1 1 5-3.8v11M16 16v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2M2 2l20 20"/>'),
+    download: s('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'),
     door: s('<path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.56v16.88a.5.5 0 0 1-.6.49L5 20V5.1a1 1 0 0 1 .8-.98l6.6-1.35a.5.5 0 0 1 .6.49z"/>'),
   };
   window.LOGO = `<svg viewBox="0 0 64 64" width="22" height="22" aria-hidden="true"><defs><linearGradient id="wlg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d6d"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs><rect width="64" height="64" rx="16" fill="url(#wlg)"/><path d="M10 34c4 0 4-10 8-10s4 18 8 18 4-24 8-24 4 28 8 28 4-16 8-16 4 6 4 6" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;

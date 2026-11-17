@@ -21,6 +21,7 @@
   $('#btn-panel .ic').innerHTML = ICONS.queue;
   $('#add-ic').innerHTML = ICONS.search;
   $('#add-clear').innerHTML = ICONS.close;
+  $('#results-close').innerHTML = ICONS.close;
   $('#btn-add-current').innerHTML = `${ICONS.plus}<span>Add what's playing</span>`;
   $('#btn-library').innerHTML = `${ICONS.library}<span>From your library</span>`;
   $('#btn-shuffle').innerHTML = ICONS.shuffle;
@@ -54,9 +55,17 @@
       const b = document.createElement('button'); b.textContent = 'Leave sync';
       b.onclick = () => { session.setSync(false); hideToast(); };
       el.appendChild(b);
+    } else if (typeof opts.undo === 'function') {
+      const b = document.createElement('button'); b.textContent = 'Undo'; b.className = 'undo';
+      b.onclick = () => { hideToast(); opts.undo(); };
+      el.appendChild(b);
+    } else if (opts.button) {
+      const b = document.createElement('button'); b.textContent = opts.button.label;
+      b.onclick = () => { hideToast(); opts.button.run(); };
+      el.appendChild(b);
     }
     clearTimeout(toastT);
-    toastT = setTimeout(hideToast, opts.error ? 6500 : opts.action ? 7000 : 3200);
+    toastT = setTimeout(hideToast, opts.error ? 6500 : (opts.action || opts.undo || opts.button) ? 6000 : 3200);
   }
   function hideToast() { $('#toast').classList.remove('show'); }
   api.onToast((t) => toast(t.msg, t));
@@ -86,14 +95,59 @@
     if (name === 'saved') renderSaved();
   }
 
+  function focusSearch() {
+    if (settingsOpen) { settingsOpen = false; applyLayout(); }
+    $('#add-input').focus(); $('#add-input').select();
+  }
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (!$('#modal').hidden) { closeModal(); return; }
       if (settingsOpen && !document.querySelector('.kbd-btn.rec')) { settingsOpen = false; applyLayout(); }
-      if (document.activeElement === $('#add-input')) { clearSearch(); $('#add-input').blur(); }
+      if (document.activeElement === $('#add-input') || !$('#results-wrap').hidden) { clearSearch(); $('#add-input').blur(); }
     }
-    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); panelOpen = true; applyLayout(); switchTab('session'); $('#add-input').focus(); }
+    const typing = /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+    if ((e.key === '/' && !typing) || ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'f' || e.key === 'k'))) { e.preventDefault(); focusSearch(); }
   });
+
+  // Video / album-art toggle (data saver).
+  function renderVideoBtn(on) {
+    const b = $('#btn-video');
+    b.innerHTML = on ? ICONS.video : ICONS.videoOff;
+    b.classList.toggle('on', !!on);
+    b.title = on ? 'Video is on: click for album art only (saves data) · Ctrl+Alt+V' : 'Album art only (saves data): click to show video · Ctrl+Alt+V';
+  }
+  $('#btn-video').onclick = () => api.action('toggleVideo');
+  renderVideoBtn(!settings.dataSaver);
+
+  // Like heart in the Now Playing card.
+  $('#np-like').onclick = () => { api.action('like'); player.liked = !player.liked; renderLike(); };
+  function renderLike() {
+    const b = $('#np-like');
+    b.classList.toggle('on', !!player.liked);
+    b.innerHTML = player.liked ? ICONS.heartFill : ICONS.heart;
+    b.title = player.liked ? 'Liked · Ctrl+Alt+L' : 'Like · Ctrl+Alt+L';
+  }
+
+  // Updates. (Subscribe first, then read the status, so a download that
+  // finishes while the window is starting is never missed.)
+  let update = null;
+  function renderUpdate() {
+    const pill = $('#update-pill');
+    const r = update && update.ready;
+    pill.hidden = !r;
+    if (r) { pill.innerHTML = `${ICONS.download}<span>Update ready · Restart</span>`; pill.title = `Wavelength ${r.version} is downloaded. Restart to finish updating.`; }
+  }
+  $('#update-pill').onclick = () => api.applyUpdate();
+  let notifiedUpdate = null;
+  api.onUpdate((u) => {
+    update = u; renderUpdate();
+    if (u.ready && notifiedUpdate !== u.ready.version) {
+      notifiedUpdate = u.ready.version;
+      toast(`Wavelength ${u.ready.version} is ready.`, { button: { label: 'Restart now', run: () => api.applyUpdate() } });
+    }
+    if (settingsOpen && window.__renderUpdateBox) window.__renderUpdateBox(u);
+  });
+  api.updateStatus().then((u) => { if (u && (!update || u.ready)) { update = u; renderUpdate(); } });
 
   // ------------------------------------------------------------ player feed
   api.onPlayerState((s) => {
@@ -101,7 +155,10 @@
     session.onPlayer(s);
     if (s.ready) $('#ytm-loading').hidden = true;
     renderNpProgress();
+    if (s.videoId && s.liked !== lastLiked) { lastLiked = s.liked; renderLike(); }
+    if (s.video !== lastVideo) { lastVideo = s.video; renderVideoBtn(s.video); }
   });
+  let lastLiked, lastVideo;
   api.onPlayerEvent((type, data) => session.onPlayerEvent(type, data));
   api.onAction((name, arg) => {
     if (name === 'seek') session.do('seek', { position: arg });
@@ -113,6 +170,7 @@
       $('#ytm-loading').hidden = !!u.offline || !!player.ready;
       if (u.reason) $('#offline-reason').textContent = `Check your internet connection. (${u.reason})`;
     }
+    if ('videoOn' in u) renderVideoBtn(u.videoOn);
   });
   api.onSettings((s) => { settings = s; me.name = s.name; me.color = s.color; session.opts.peerServer = s.peerServer; });
   api.onSessionAdd((req) => handleAddRequest(req));
@@ -124,6 +182,20 @@
   });
 
   // ------------------------------------------------------------ adding
+  // Every add goes through here: one toast, with Undo.
+  function addItems(items, where = 'end') {
+    if (!items.length) return;
+    session.do('add', { items, where });
+    const what = items.length === 1 ? `“${items[0].title}”` : `${items.length} songs`;
+    const ids = items.map((t) => t.videoId);
+    toast(where === 'next' ? `${what} plays next` : `Added ${what} to Up Next`, { undo: () => undoAdd(ids, where) });
+  }
+  function undoAdd(ids, where) {
+    const mine = session.queue.filter((t) => t.addedBy && t.addedBy.id === me.id && ids.includes(t.videoId));
+    const pick = where === 'next' ? mine.slice(0, ids.length) : mine.slice(-ids.length);
+    for (const t of pick) session.do('remove', { uid: t.uid });
+    toast(pick.length ? 'Removed from Up Next.' : 'Already playing, nothing to undo.');
+  }
   const addedToast = (items, where) => {
     if (!items.length) return;
     const what = items.length === 1 ? `“${items[0].title}”` : `${items.length} songs`;
@@ -133,8 +205,7 @@
     const known = new Map([...(lastResults || [])].map((r) => [r.videoId, r]));
     const items = (await Promise.all(ids.map((id) => known.get(id) || api.ytm('resolve', id).catch(() => null)))).filter(Boolean);
     if (!items.length) { toast('Couldn\'t find that song.', { error: true }); return; }
-    session.do('add', { items, where });
-    addedToast(items, where);
+    addItems(items, where);
   }
   async function addList(listId, where = 'end', shuffle = false) {
     toast('Loading songs…');
@@ -142,23 +213,21 @@
       let songs = await api.ytm('playlist', listId);
       if (!songs.length) { toast('That playlist is empty or private.', { error: true }); return; }
       if (shuffle) songs = shuffled(songs);
-      session.do('add', { items: songs, where });
-      addedToast(songs, where);
+      addItems(songs, where);
     } catch (e) { toast(cleanErr(e), { error: true }); }
   }
   const shuffled = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const cleanErr = (e) => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
   function handleAddRequest(req) {
-    panelOpen = true; applyLayout();
-    if (req.videoIds) addVideoIds(req.videoIds, req.where);
+    if (req.source !== 'mini' && !panelOpen) { panelOpen = true; applyLayout(); }
+    if (req.items) addItems(req.items.filter((t) => t && /^[\w-]{11}$/.test(t.videoId)), req.where);
+    else if (req.videoIds) addVideoIds(req.videoIds, req.where);
     else if (req.listId) addList(req.listId, req.where, req.shuffle);
   }
 
   $('#btn-add-current').onclick = () => {
     if (!player.videoId) { toast('Nothing is playing yet.'); return; }
-    const item = { videoId: player.videoId, title: player.title, artist: player.artist, art: player.art, duration: player.duration };
-    session.do('add', { items: [item], where: 'end' });
-    addedToast([item], 'end');
+    addItems([{ videoId: player.videoId, title: player.title, artist: player.artist, art: player.art, duration: player.duration }], 'end');
   };
 
   // ------------------------------------------------------------ search
@@ -182,13 +251,15 @@
     } catch { /* not a link */ }
     return null;
   }
-  function clearSearch() { input.value = ''; $('#results').hidden = true; $('#add-clear').hidden = true; lastResults = []; }
+  function clearSearch() { input.value = ''; $('#results-wrap').hidden = true; $('#add-clear').hidden = true; lastResults = []; searchSeq++; }
   $('#add-clear').onclick = () => { clearSearch(); input.focus(); };
+  $('#results-close').onclick = () => clearSearch();
+  $('#results-ytm').onclick = () => { const q = input.value.trim(); if (q) api.searchPage(q); };
   input.addEventListener('input', () => {
     $('#add-clear').hidden = !input.value;
     clearTimeout(searchT);
-    if (!input.value.trim()) { $('#results').hidden = true; return; }
-    searchT = setTimeout(runSearch, 320);
+    if (!input.value.trim()) { $('#results-wrap').hidden = true; return; }
+    searchT = setTimeout(runSearch, 300);
   });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -202,7 +273,12 @@
     if (!q) return;
     const seq = ++searchSeq;
     const box = $('#results');
-    box.hidden = false;
+    // Results show at the top of the Up Next panel.
+    if (!panelOpen || settingsOpen) { panelOpen = true; settingsOpen = false; applyLayout(); }
+    switchTab('session');
+    $('#results-wrap').hidden = false;
+    $('#tab-session').scrollTop = 0;
+    $('#results-meta').textContent = `· “${q.length > 28 ? q.slice(0, 27) + '…' : q}”`;
     box.innerHTML = '<div class="spinner"></div>';
     const link = parseLink(q);
     try {
@@ -215,7 +291,8 @@
       lastResults = results; lastResults.query = q;
       if (addFirst && results[0]) { addVideoIds([results[0].videoId], 'end'); }
       box.innerHTML = (listNote ? `<div class="track"><div class="ph" style="display:grid;place-items:center">${ICONS.library}</div><div class="meta"><div class="t">Playlist / album link</div><div class="a">Add every song from it</div></div><div class="acts" style="display:flex"><button class="icon-btn small" data-list="${esc(listNote)}" data-where="end" title="Add all to Up Next">${ICONS.plus}</button><button class="icon-btn small" data-list="${esc(listNote)}" data-shuffle="1" title="Shuffle in">${ICONS.shuffle}</button></div></div>` : '')
-        + (results.length ? results.map(resultRow).join('') : (listNote ? '' : '<div class="note">No songs found.</div>'));
+        + (results.length ? results.map(resultRow).join('') : (listNote ? '' : '<div class="note">No songs found.</div>'))
+        + (link ? '' : `<button class="see-all" data-see="1">${ICONS.search}<span>See all results in YouTube Music</span></button>`);
     } catch (e) {
       if (seq !== searchSeq) return;
       box.innerHTML = `<div class="note">${esc(cleanErr(e))}</div>`;
@@ -233,10 +310,12 @@
   }
   $('#results').addEventListener('click', (e) => {
     const b = e.target.closest('button');
-    if (!b) return;
-    if (b.dataset.list) { addList(b.dataset.list, 'end', !!b.dataset.shuffle); return; }
-    const row = b.closest('[data-vid]');
-    if (row && b.dataset.add) addVideoIds([row.dataset.vid], b.dataset.add);
+    if (b && b.dataset.see) { api.searchPage(input.value.trim()); return; }
+    if (b && b.dataset.list) { addList(b.dataset.list, 'end', !!b.dataset.shuffle); return; }
+    const row = e.target.closest('[data-vid]');
+    if (!row) return;
+    // Click a result to add it; the ▶ button makes it play next.
+    addVideoIds([row.dataset.vid], b && b.dataset.add ? b.dataset.add : 'end');
   });
 
   // ------------------------------------------------------------ render

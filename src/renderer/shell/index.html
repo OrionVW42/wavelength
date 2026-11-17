@@ -14,9 +14,16 @@
     <button class="icon-btn" id="nav-back" title="Back"></button>
     <button class="icon-btn" id="nav-home" title="YouTube Music home"></button>
   </nav>
+  <div class="tb-search">
+    <span class="add-ic" id="add-ic"></span>
+    <input id="add-input" type="text" placeholder="Search songs or paste a link  ( / )" spellcheck="false" autocomplete="off">
+    <button class="icon-btn small" id="add-clear" title="Clear" hidden></button>
+  </div>
   <div class="tb-center"><div id="toast" class="toast" role="status" aria-live="polite"></div></div>
   <div class="tb-right">
+    <button class="update-pill" id="update-pill" hidden></button>
     <button class="room-pill" id="room-pill" hidden></button>
+    <button class="icon-btn" id="btn-video" title="Show video (Ctrl+Alt+V)"></button>
     <button class="icon-btn" id="btn-mini" title="Mini player (Ctrl+Alt+N)"></button>
     <button class="icon-btn" id="btn-settings" title="Settings"></button>
     <button class="tb-toggle" id="btn-panel" title="Up Next &amp; listening rooms"><span class="ic"></span><span>Up Next</span><span class="badge" id="queue-badge" hidden>0</span></button>
@@ -42,6 +49,17 @@
   </div>
 
   <div class="tab-body" id="tab-session">
+    <section class="results-wrap" id="results-wrap" hidden>
+      <div class="list-head first">
+        <div><span class="h">Search</span> <span class="muted" id="results-meta"></span></div>
+        <div class="list-actions">
+          <button class="btn small" id="results-ytm" title="Open the full results in YouTube Music">See all</button>
+          <button class="icon-btn small" id="results-close" title="Close search (Esc)"></button>
+        </div>
+      </div>
+      <div id="results" class="results"></div>
+    </section>
+
     <section class="card room-card" id="room-card"></section>
 
     <section class="np" id="np" hidden>
@@ -52,18 +70,13 @@
         <div class="np-artist" id="np-artist"></div>
         <div class="np-bar"><div class="np-fill" id="np-fill"></div></div>
       </div>
+      <button class="np-like" id="np-like" title="Like (Ctrl+Alt+L)"></button>
     </section>
 
-    <div class="add-box">
-      <span class="add-ic" id="add-ic"></span>
-      <input id="add-input" type="text" placeholder="Search songs or paste a YouTube Music link" spellcheck="false" autocomplete="off">
-      <button class="icon-btn small" id="add-clear" title="Clear" hidden></button>
-    </div>
     <div class="quick-row">
       <button class="chip" id="btn-add-current"></button>
       <button class="chip" id="btn-library"></button>
     </div>
-    <div id="results" class="results" hidden></div>
 
     <div class="list-head">
       <div><span class="h">Up next</span> <span class="muted" id="queue-meta"></span></div>

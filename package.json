@@ -1,17 +1,20 @@
 {
   "name": "wavelength",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "YouTube Music desktop player with a mini player, hotkeys, ad blocking and listen-together rooms",
-  "main": "src/main/main.js",
+  "main": "src/boot/boot.js",
   "scripts": {
     "start": "electron .",
     "icon": "electron tools/make-icon.js",
     "test": "node tests/run.js",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis && node tools/make-update.js"
   },
   "author": "Wavelength contributors",
   "homepage": "https://orionvw42.github.io/wavelength/",
-  "repository": { "type": "git", "url": "https://github.com/OrionVW42/wavelength.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OrionVW42/wavelength.git"
+  },
   "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
@@ -69,5 +72,8 @@
       "shortcutName": "Wavelength",
       "deleteAppDataOnUninstall": false
     }
+  },
+  "wavelength": {
+    "github": "OrionVW42/wavelength"
   }
 }

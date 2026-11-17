@@ -79,6 +79,8 @@
       position: v ? v.currentTime : 0,
       playing: !!(v && !v.paused && !v.ended),
       liked: like === 'LIKE',
+      video: !artMode(),
+      dataSaver: !!cfg.dataSaver,
       volume: vol, muted,
       ad: isAd(),
       adLeft: isAd() && v && isFinite(v.duration) ? Math.max(0, v.duration - v.currentTime) : 0,
@@ -201,7 +203,61 @@
       }
     } else { wdPos = v.currentTime; wdTicks = 0; }
   }
-  setInterval(() => { addStyle(); handleAds(); handlePopups(); checkTrack(); handleEndStall(); handleMidStall(); push(); }, 500);
+  // ------------------------------------------------------- data saver
+  // Album art instead of the video, and the stream held at 144p (the lowest
+  // YouTube offers without Premium's audio-only mode). One click shows video.
+  const artMode = () => !!cfg.dataSaver !== !!cfg.videoFlip;
+  // The quality is set once per song (YouTube reports "auto" even while it
+  // holds 144p, so re-applying it on a timer would only cause re-buffering).
+  let qualityFor = null, overlayArt = '';
+  function applySaver(force) {
+    const on = artMode();
+    document.documentElement.classList.toggle('wl-saver', on);
+    const p = player(); if (!p || !p.setPlaybackQualityRange) return;
+    const vid = videoData().video_id || null;
+    if (on && !isAd() && vid && (force || qualityFor !== vid)) {
+      qualityFor = vid;
+      try { p.setPlaybackQualityRange('tiny', 'tiny'); } catch { /* not ready */ }
+    } else if (!on && force) {
+      qualityFor = null;
+      try { p.setPlaybackQualityRange('auto', 'auto'); } catch { /* not ready */ }
+    }
+    // Art overlay over the video area of the player page.
+    const host = $('ytmusic-player#player') || $('ytmusic-player');
+    if (!host) return;
+    let ov = document.getElementById('wl-art');
+    if (!ov) {
+      // (YouTube Music enforces Trusted Types: build nodes, never innerHTML.)
+      ov = document.createElement('div'); ov.id = 'wl-art';
+      const img = document.createElement('div'); img.className = 'wl-art-img';
+      const btn = document.createElement('button'); btn.className = 'wl-art-btn'; btn.type = 'button';
+      btn.textContent = '▶  Show video';
+      btn.addEventListener('click', (e) => { e.stopPropagation(); wl.cmd.toggleVideo(); });
+      ov.append(img, btn);
+      host.appendChild(ov);
+    } else if (ov.parentNode !== host) host.appendChild(ov);
+    const m = navigator.mediaSession && navigator.mediaSession.metadata;
+    const vd = videoData();
+    const art = (m && vd.title && m.title === vd.title && bestArt(m)) || (vd.video_id ? `https://i.ytimg.com/vi/${vd.video_id}/hqdefault.jpg` : '');
+    if (art && art !== overlayArt) { overlayArt = art; ov.firstChild.style.backgroundImage = `url("${art.replace(/"/g, '%22')}")`; }
+  }
+  const saverCss = `
+    html.wl-saver ytmusic-player #song-video, html.wl-saver ytmusic-player .html5-video-container { opacity: 0 !important; }
+    #wl-art { display: none; }
+    html.wl-saver #wl-art { display: flex; position: absolute; inset: 0; z-index: 5; align-items: center; justify-content: center; background: #000; pointer-events: none; }
+    #wl-art .wl-art-img { width: min(100%, 100vh); aspect-ratio: 1; max-height: 100%; background: center / contain no-repeat; border-radius: 8px; }
+    #wl-art .wl-art-btn { pointer-events: auto; position: absolute; bottom: 14px; right: 14px; padding: 8px 14px; border-radius: 18px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(0,0,0,.65); color: #fff; font: 600 13px Roboto, Arial, sans-serif; cursor: pointer; backdrop-filter: blur(6px); }
+    #wl-art .wl-art-btn:hover { background: rgba(255,255,255,.15); }
+    html.wl-saver ytmusic-player-page:not([player-fullscreened]) ytmusic-player { background: #000; }`;
+  const addSaverStyle = () => {
+    if (document.getElementById('wl-saver-style')) return;
+    const s = document.createElement('style'); s.id = 'wl-saver-style'; s.textContent = saverCss;
+    (document.head || document.documentElement).appendChild(s);
+  };
+  document.addEventListener('loadedmetadata', (e) => { if (isVid(e)) setTimeout(() => applySaver(true), 300); }, true);
+
+  setInterval(() => { addStyle(); addSaverStyle(); handleAds(); handlePopups(); checkTrack(); handleEndStall(); handleMidStall(); applySaver(); push(); }, 500);
 
   // ---------------------------------------------------------------- commands
   const click = (sel) => { const b = $(sel); if (b) { b.click(); return true; } return false; };
@@ -255,7 +311,15 @@
     },
     back() { history.back(); },
     browse(browseId) { return navigate({ browseEndpoint: { browseId } }); },
-    setCfg(c) { Object.assign(cfg, c); pushSoon(); },
+    searchPage(query) { return navigate({ searchEndpoint: { query: String(query) } }); },
+    toggleVideo() {
+      cfg.videoFlip = !cfg.videoFlip;
+      applySaver(true);
+      send('video', { on: !artMode(), flip: cfg.videoFlip });
+      pushSoon();
+      return !artMode();
+    },
+    setCfg(c) { Object.assign(cfg, c); if ('dataSaver' in c || 'videoFlip' in c) applySaver(true); pushSoon(); },
     state,
   };
 
@@ -461,9 +525,10 @@
     },
   };
 
-  // -------------------------------------------------- right-click targets
-  // Remember what song/playlist row was right-clicked so the native context
-  // menu can offer "Add to Up Next".
+  // -------------------------------------------------- right-click = add
+  // Right-clicking a song (or album / playlist card) adds it straight to
+  // Wavelength's Up Next. YouTube Music's own popup is suppressed here; its
+  // full menu is still one click away on the ⋮ button.
   function extract(el) {
     let videoId = null, listId = null, browseId = null;
     for (const a of el.querySelectorAll('a[href]')) {
@@ -485,15 +550,40 @@
     if (listId || browseId) return { kind: 'list', listId: listId || browseId, title };
     return null;
   }
-  document.addEventListener('contextmenu', (e) => {
+  const closeMenus = () => document.querySelectorAll('tp-yt-iron-dropdown').forEach((d) => { try { if (d.opened) d.close(); } catch { /* gone */ } });
+  window.addEventListener('contextmenu', (e) => {
+    const path = e.composedPath();
+    if (path.some((el) => el instanceof Element && el.matches('input, textarea, [contenteditable=""], [contenteditable="true"]'))) return;
     let info = null;
-    for (const el of e.composedPath()) {
+    for (const el of path) {
       if (!(el instanceof Element)) continue;
       if (el.matches('ytmusic-responsive-list-item-renderer, ytmusic-two-row-item-renderer, ytmusic-player-queue-item, ytmusic-card-shelf-renderer')) {
         info = extract(el); break;
       }
-      if (el.matches('ytmusic-player-bar')) { const id = videoData().video_id; if (id) info = { kind: 'song', videoId: id, title: videoData().title }; break; }
     }
     wl.ctx = { info, t: Date.now() };
+    if (!info) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    closeMenus();
+    send('add', info.kind === 'song'
+      ? { videoIds: [info.videoId], where: 'end', source: 'rightclick', title: info.title }
+      : { listId: info.listId, where: 'end', source: 'rightclick', title: info.title });
+  }, true);
+
+  // YouTube Music's own "Play next" / "Add to queue" (⋮ menu) feed its hidden
+  // queue, which Wavelength's Up Next replaces. Send them to Up Next instead.
+  window.addEventListener('click', (e) => {
+    const item = e.composedPath().find((el) => el instanceof Element && el.matches('ytmusic-menu-service-item-renderer'));
+    if (!item) return;
+    const d = item.data || (item.__data && item.__data.data);
+    const q = d && d.serviceEndpoint && d.serviceEndpoint.queueAddEndpoint;
+    if (!q) return;
+    const t = q.queueTarget || {};
+    const where = /AFTER_CURRENT/.test(q.queueInsertPosition || '') ? 'next' : 'end';
+    const req = t.videoId ? { videoIds: [t.videoId], where, source: 'menu' } : t.playlistId ? { listId: t.playlistId, where, source: 'menu' } : null;
+    if (!req) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    closeMenus();
+    send('add', req);
   }, true);
 })();

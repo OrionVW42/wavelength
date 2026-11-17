@@ -8,10 +8,11 @@
 <link rel="stylesheet" href="mini.css">
 </head>
 <body>
+<div class="handle grab" id="handle" title="Drag to move"><span class="pill"></span></div>
 <div class="mini idle" id="mini">
   <div class="bg"><img id="bg" alt=""></div>
-  <div class="art-wrap drag"><img class="art" id="art" alt=""><div class="art-ph" id="art-ph"></div></div>
-  <div class="info drag">
+  <div class="art-wrap grab" id="art-wrap"><img class="art" id="art" alt=""><div class="art-ph" id="art-ph"></div></div>
+  <div class="info grab" id="info">
     <div class="room" id="room" hidden></div>
     <div class="title" id="title-wrap"><span id="title">Nothing playing</span></div>
     <div class="sub"><span id="artist">Open Wavelength to pick something</span></div>
@@ -23,11 +24,21 @@
     <button class="cbtn" id="b-next" title="Next"></button>
   </div>
   <div class="side">
+    <button class="sbtn" id="b-search" title="Search and add to Up Next"></button>
     <button class="sbtn" id="b-full" title="Open full player"></button>
     <button class="sbtn" id="b-close" title="Hide until the next song"></button>
   </div>
   <div class="progress" id="prog"><div class="fill" id="fill"></div></div>
+  <div class="grip" id="grip" title="Drag to resize"></div>
   <div class="flash" id="flash"></div>
+</div>
+<div class="search" id="search" hidden>
+  <div class="s-input">
+    <span class="s-ic" id="s-ic"></span>
+    <input id="s-q" type="text" placeholder="Add a song to Up Next…" spellcheck="false" autocomplete="off">
+    <button class="sbtn" id="s-close" title="Close (Esc)"></button>
+  </div>
+  <div class="s-results" id="s-results"><div class="s-note">Type a song or artist. Click a result to add it.</div></div>
 </div>
 <script src="../common/icons.js"></script>
 <script src="mini.js"></script>

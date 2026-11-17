@@ -27,8 +27,10 @@ It installs for your Windows user only (no admin prompt) and opens when done.
 
 | | |
 |---|---|
-| **Mini player** | Floats over every window. Drag it anywhere. Scroll over it to change volume, click the bar to seek. ⤢ opens the full player, ✕ hides it until the next song. |
-| **Up Next** (right panel) | Your queue. It plays before YouTube Music's own autoplay. Search or paste a link, or **right-click any song, album or playlist** in YouTube Music → *Add to Up Next* / *Play next*. Drag to reorder. |
+| **Mini player** | Floats over every window and pops out when you minimize or close the full player. Move it by the handle on top, resize it from the corner. Scroll for volume, click the bar to seek, 🔍 to search and add a song. |
+| **Up Next** (right panel) | Your queue. It plays before YouTube Music's own autoplay. Search from the title bar, **right-click any song, album or playlist** to add it (with Undo), or use YouTube Music's ⋮ → *Play next*. Drag to reorder. |
+| **Data saver** | On by default: album art instead of music videos, stream held at 144p. The ▶ Show video button (or Ctrl+Alt+V) brings video back. |
+| **Updates** | Wavelength updates itself in the background (a few MB) and asks you to restart. |
 | **From your library** | Add a whole playlist (or Liked Music) to Up Next, in order or shuffled. |
 | **Save** | The 💾 button saves what's playing plus Up Next (and optionally what already played) as a playlist. Find it under **Saved**: play it again, rename it, or push it into your YouTube Music library. |
 | **Closing** | Closing the window keeps the music going in the system tray. Quit from the tray icon. |
@@ -43,6 +45,8 @@ It installs for your Windows user only (no admin prompt) and opens when done.
 | Like song | `Ctrl+Alt+L` |
 | Show / hide full player | `Ctrl+Alt+M` |
 | Show / hide mini player | `Ctrl+Alt+N` |
+| Search from the mini player | `Ctrl+Alt+S` |
+| Video on / off | `Ctrl+Alt+V` |
 
 ## Listen together
 
@@ -75,7 +79,8 @@ says it couldn't reach the room.
 npm install
 npm start                 # run from source
 node tests/together.js    # two-instance listen-together test (real network)
-npm run dist              # build dist/Wavelength-Setup-<version>.exe
+npm run dist              # build the installer + the auto-update files in dist/
+node tests/updater.js     # end-to-end auto-update test on the packaged app
 ```
 
 The smoke test runs the real app against YouTube Music, muted:
