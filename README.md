@@ -4,7 +4,7 @@ A desktop player for **YouTube Music** with a floating mini player, global hotke
 a built-in ad blocker, and **listen-together rooms**: share a code, and everyone hears
 the same songs at the same moment, with a shared Up Next anyone can add to.
 
-**[Website](https://orionvw42.github.io/wavelength/) · [Download for Windows](https://github.com/OrionVW42/wavelength/releases/latest)**
+**[Website](https://orionvw42.github.io/wavelength/) · [Download for Windows](https://github.com/OrionVW42/wavelength/releases/latest) · [Download for Android](https://github.com/OrionVW42/wavelength/releases/tag/android-v0.3.0)**
 
 ![Wavelength with a live listening room and the mini player](docs/media/screenshots/hero.jpg)
 
@@ -98,6 +98,33 @@ bot to your server with the **Add to server** button.
 - If Google ever says the browser "may not be secure" while signing in, toggle
   **Settings → Google sign-in compatibility** and try again.
 
+## Android
+
+Wavelength for Android looks and works like the YouTube Music app, without ads,
+and joins the same listening rooms as the PC app. No Google Play or microG needed.
+
+<p>
+<img src="docs/media/screenshots/android-player.jpg" width="250" alt="Now Playing">
+<img src="docs/media/screenshots/android-lock.jpg" width="250" alt="Lock screen player">
+<img src="docs/media/screenshots/android-widget.jpg" width="280" alt="Home screen widget">
+</p>
+
+- Keeps playing with the screen off and the app in the background, and never
+  skips on its own (if YouTube hiccups mid-song, the song is picked right back up).
+- Home, search, library, albums, artists, playlists, lyrics, radio, Up Next,
+  Song/Video switch, data saver.
+- Big lock screen player; a home screen widget you can resize from a small bar
+  to a full player with Up Next; controls in the notification, on headphones,
+  Bluetooth and in the car.
+- Listen-together rooms with phones and PCs.
+
+**Install:** on your phone, download `Wavelength-Android-<version>.apk` from the
+[Android release](https://github.com/OrionVW42/wavelength/releases/tag/android-v0.3.0)
+and open it (allow installing from your browser if asked). On first launch, allow
+it to run in the background and turn on full screen notifications (for the lock
+screen player). It updates itself: when a new version is released, tap **Update**
+in the banner. Android 8 or newer.
+
 ## For developers
 
 ```bash
@@ -107,6 +134,13 @@ node tests/together.js    # two-instance listen-together test (real network)
 npm run dist              # build the installer + the auto-update files in dist/
 node tests/updater.js     # end-to-end auto-update test on the packaged app
 ```
+
+Android app (`android/`): Java + two WebViews (a hidden YouTube Music engine
+running the same `src/inject/bridge.js`, and the app UI in `android/app/src/main/assets/ui`
+running the same `session.js` / `relay.js`, copied in at build time). Build with
+Gradle 8.14 + JDK 21 + Android SDK 36: `gradle assembleRelease` in `android/`
+(`-Pwldebug` enables WebView debugging). Release APKs are signed with a key kept
+outside the repo.
 
 The smoke test runs the real app against YouTube Music, muted:
 `WL_TEST_SCRIPT=tests/smoke.js WL_USERDATA=<temp dir> npx electron .`

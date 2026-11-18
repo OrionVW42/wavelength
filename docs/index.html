@@ -119,6 +119,11 @@
     nav.top .links { display: none; }
     section { padding: 56px 0; }
   }
+  .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 40px; align-items: center; }
+  .phones figure { margin: 0; }
+  .phones img { width: 100%; border-radius: 26px; border: 1px solid var(--line); box-shadow: 0 30px 80px -30px rgba(0,0,0,.85); }
+  .phones figcaption { color: var(--dim); font-size: 14px; text-align: center; margin-top: 12px; }
+  @media (max-width: 760px) { .phones { grid-template-columns: 1fr 1fr; } .phones figure:last-child { grid-column: 1 / -1; max-width: 70%; margin: 0 auto; } }
 </style>
 </head>
 <body>
@@ -126,20 +131,21 @@
 <nav class="top"><div class="wrap">
   <a class="brand" href="#"><img src="media/icon/icon.png" alt="">Wavelength</a>
   <div class="links">
-    <a href="#features">Features</a><a href="#together">Listen together</a><a href="#mini">Mini player</a><a href="#hotkeys">Hotkeys</a><a href="#faq">FAQ</a>
+    <a href="#features">Features</a><a href="#together">Listen together</a><a href="#android">Android</a><a href="#mini">Mini player</a><a href="#hotkeys">Hotkeys</a><a href="#faq">FAQ</a>
     <a href="https://github.com/OrionVW42/wavelength">GitHub</a>
   </div>
 </div></nav>
 
 <header class="hero"><div class="wrap">
-  <span class="pill"><i></i>Version 1.4 for Windows · free</span>
+  <span class="pill"><i></i>Version 1.4 for Windows · now on Android · free</span>
   <h1>YouTube Music,<br><span class="g">on the same wavelength.</span></h1>
   <p class="lede">A desktop player for YouTube Music with a mini player that floats over everything, global hotkeys, a built-in ad blocker, and rooms where your friends hear the same song at the same moment.</p>
   <div class="cta">
     <a class="btn primary" href="https://github.com/OrionVW42/wavelength/releases/latest">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
       Download for Windows</a>
-    <a class="btn ghost" href="#together">See how rooms work</a>
+    <a class="btn ghost android-dl" href="https://github.com/OrionVW42/wavelength/releases/tag/android-v0.3.0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>
+      Get it for Android</a>
   </div>
   <p class="small" style="margin-top:14px">Windows 10 and 11 · 64-bit · about 108 MB</p>
   <div class="hero-shot"><img src="media/screenshots/hero.jpg" alt="Wavelength with YouTube Music, a live listening room and the mini player"></div>
@@ -193,6 +199,30 @@
     <li><b>Host controls.</b> The host can lock playback so guests can only add songs.</li>
     <li><b>Nobody needs Premium.</b> Guests don't even need to be signed in.</li>
   </ul>
+</div></section>
+
+<section id="android" class="alt"><div class="wrap">
+  <div class="eyebrow">Android</div>
+  <h2>Your music in your pocket</h2>
+  <p class="sub">Wavelength for Android looks and works like the YouTube Music app, minus the ads, plus everything that makes Wavelength Wavelength. Rooms work between phones and PCs, so a friend on their phone hears exactly what you play on your computer. No Google Play, no microG: just install it and sign in.</p>
+  <div class="phones">
+    <figure><img src="media/screenshots/android-player.jpg" alt="Now Playing on Android" loading="lazy"><figcaption>Now Playing, with Song and Video, lyrics and Up Next</figcaption></figure>
+    <figure><img src="media/screenshots/android-lock.jpg" alt="The big lock screen player" loading="lazy"><figcaption>A big player right on the lock screen</figcaption></figure>
+    <figure><img src="media/screenshots/android-widget.jpg" alt="The home screen widget showing Up Next" loading="lazy"><figcaption>A widget you can size from a small bar to a full player</figcaption></figure>
+  </div>
+  <ul class="ticks" style="max-width:820px;margin-top:36px">
+    <li><b>Plays all the way through.</b> Screen off, app in the background, phone asleep: the music keeps going, and the next song starts on time.</li>
+    <li><b>Never skips on its own.</b> If YouTube hiccups mid-song, Wavelength picks the song right back up where it was.</li>
+    <li><b>No ads, ever.</b> No audio ads, no video ads, no upsell banners.</li>
+    <li><b>Home, search, library, albums, artists, playlists, lyrics, radio</b> — all of YouTube Music, signed in with your account.</li>
+    <li><b>Controls everywhere:</b> lock screen, notification, widget, headphones, Bluetooth and your car.</li>
+    <li><b>Updates itself</b> from GitHub: when a new version is out, tap Update.</li>
+  </ul>
+  <div style="text-align:center;margin-top:30px">
+    <a class="btn primary android-dl" href="https://github.com/OrionVW42/wavelength/releases/tag/android-v0.3.0"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>
+      Download for Android</a>
+    <p class="small" style="margin-top:12px">Android 8 or newer · about 2 MB · <a href="#faq-android">How to install</a></p>
+  </div>
 </div></section>
 
 <section id="mini"><div class="wrap split">
@@ -264,6 +294,8 @@
   <div class="faq">
     <details><summary>Windows says "Windows protected your PC". Is it safe?</summary>
       <p>The installer isn't code-signed (that costs hundreds of dollars a year), so Windows warns about it. Click <b>More info → Run anyway</b>. The full source code is on GitHub.</p></details>
+    <details id="faq-android"><summary>How do I install the Android app?</summary>
+      <p>On your phone, tap <b>Download for Android</b> and open the file. Android asks you to allow installing from your browser the first time; say yes. On first launch, allow Wavelength to <b>run in the background</b> (so music never stops) and turn on <b>full screen notifications</b> (for the lock screen player). It isn't on Google Play, so Play Protect may ask you to confirm. New versions appear as a banner in the app: tap <b>Update</b>. To add the widget, long-press your home screen → <b>Widgets</b> → Wavelength.</p></details>
     <details><summary>Do I need YouTube Music Premium?</summary>
       <p>No. Sign in with any Google account, or don't sign in at all and still play music and join rooms.</p></details>
     <details><summary>Does closing the window stop the music?</summary>
@@ -289,6 +321,8 @@
     <a class="btn primary" href="https://github.com/OrionVW42/wavelength/releases/latest">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
       Download Wavelength for Windows</a>
+    <a class="btn ghost android-dl" href="https://github.com/OrionVW42/wavelength/releases/tag/android-v0.3.0" style="margin-left:8px"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.38.38 0 0 0-.66-.38l-1.86 3.22a11.4 11.4 0 0 0-9.84 0L5.22 5.92a.38.38 0 0 0-.66.38L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>
+      Android</a>
     <p class="small" style="margin:16px 0 0">Run <b>Wavelength-Setup.exe</b>. It installs for your user only (no admin prompt) and opens when it's done. Then sign in, play something, and start a room.</p>
   </div>
 </div></section>
@@ -298,5 +332,16 @@
   <span>Not affiliated with or endorsed by YouTube or Google. YouTube Music is a trademark of Google LLC.</span>
 </div></footer>
 
+<script>
+  // Point the Android buttons straight at the newest APK.
+  fetch('https://api.github.com/repos/OrionVW42/wavelength/releases?per_page=20').then((r) => r.json()).then((rels) => {
+    for (const rel of rels) for (const a of rel.assets || []) {
+      if (/^Wavelength-Android-[\d.]+\.apk$/.test(a.name)) {
+        document.querySelectorAll('.android-dl').forEach((b) => { b.href = a.browser_download_url; });
+        return;
+      }
+    }
+  }).catch(() => {});
+</script>
 </body>
 </html>
