@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/background" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg" android:clipToOutline="true">
+  <ImageView android:id="@+id/bg_color" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/widget_fill" android:scaleType="fitXY" android:importantForAccessibility="no"/>
+  <ImageView android:id="@+id/bg_art" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:importantForAccessibility="no"/>
+  <ImageView android:id="@+id/art" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" android:contentDescription="Album art"/>
+  <ImageView android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/scrim_bottom" android:scaleType="fitXY" android:importantForAccessibility="no"/>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_gravity="bottom" android:orientation="horizontal" android:gravity="center_vertical" android:padding="10dp">
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" android:layout_marginEnd="6dp">
+      <TextView android:id="@+id/title" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="13sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" android:text="Wavelength"/>
+      <TextView android:id="@+id/artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#B3FFFFFF" android:textSize="11sp" android:maxLines="1" android:ellipsize="end" android:text="Tap to open"/>
+    </LinearLayout>
+    <ImageView android:id="@+id/play" android:layout_width="42dp" android:layout_height="42dp" android:padding="11dp" android:src="@drawable/ic_play" android:background="@drawable/play_circle" android:contentDescription="Play" android:scaleType="fitCenter"/>
+  </LinearLayout>
+</FrameLayout>

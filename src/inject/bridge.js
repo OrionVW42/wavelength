@@ -92,18 +92,41 @@
 
   // ------------------------------------------------- track change detection
   let lastVid = null, lastPos = 0, lastDur = 0, lastTrackAt = 0;
+  // A track change we asked for (load / next / prev) can take a while on a
+  // slow connection; it still counts as ours when it lands.
+  wl.expect = null;
+  wl.trackLog = [];
   function checkTrack() {
     const vd = videoData(), v = video();
     const id = vd.video_id || null;
     if (id && id !== lastVid && !isAd()) {
       const nearEnd = lastDur > 0 && lastPos > lastDur - 3;
-      const cause = isProg() ? 'prog' : (nearEnd || wl.heldVid === lastVid ? 'auto' : 'user');
-      const prev = lastVid;
-      lastVid = id; lastTrackAt = Date.now(); wl.heldVid = null;
-      if (prev) send('track', { videoId: id, prev, cause });
+      const expected = wl.expect && Date.now() < wl.expect.until && (!wl.expect.id || wl.expect.id === id);
+      let cause = isProg() || expected ? 'prog' : (nearEnd || wl.heldVid === lastVid ? 'auto' : 'user');
+      // When nobody can touch YouTube Music's page (the Android app hides
+      // it), a change we didn't ask for is YouTube Music skipping by itself:
+      // usually a stream error part way through a song.
+      if (cause === 'user' && cfg.engineHidden) cause = 'glitch';
+      const prev = lastVid, prevPos = lastPos;
+      lastVid = id; lastTrackAt = Date.now(); wl.heldVid = null; wl.expect = null;
+      wl.trackLog.push({ at: Date.now(), from: prev, to: id, cause, pos: Math.round(prevPos), dur: Math.round(lastDur), err: wl.lastError || null });
+      if (wl.trackLog.length > 40) wl.trackLog.shift();
+      wl.lastError = null;
+      if (prev) send('track', { videoId: id, prev, cause, prevPos, prevDur: lastDur });
+      if (wl.startAt && wl.startAt.id === id) {
+        const t = wl.startAt.t; wl.startAt = null;
+        if (t > 2) setTimeout(() => { mark(); try { player().seekTo(t, true); } catch { /* not ready */ } }, 300);
+      }
     }
     if (v && !isAd()) { lastPos = v.currentTime; lastDur = isFinite(v.duration) ? v.duration : 0; }
   }
+  // YouTube's own player errors (unplayable, stream rejected, network).
+  const hookErrors = () => {
+    const p = player();
+    if (!p || p.__wlErr || !p.addEventListener) return;
+    p.__wlErr = true;
+    try { p.addEventListener('onError', (code) => { wl.lastError = { code, at: Date.now(), vid: lastVid, pos: Math.round(lastPos) }; send('playerError', wl.lastError); }); } catch { /* old player */ }
+  };
 
   // ------------------------------------------------------- media events
   const isVid = (e) => e.target && e.target.tagName === 'VIDEO';
@@ -382,7 +405,7 @@
   };
   document.addEventListener('loadedmetadata', (e) => { if (isVid(e)) setTimeout(() => applySaver(true), 300); }, true);
 
-  setInterval(() => { addStyle(); addSaverStyle(); handleAds(); handlePopups(); checkTrack(); handleEndStall(); handleMidStall(); applySaver(); push(); }, 500);
+  setInterval(() => { hookErrors(); addStyle(); addSaverStyle(); handleAds(); handlePopups(); checkTrack(); handleEndStall(); handleMidStall(); applySaver(); push(); }, 500);
 
   // ---------------------------------------------------------------- commands
   const click = (sel) => { const b = $(sel); if (b) { b.click(); return true; } return false; };
@@ -405,14 +428,16 @@
     pause() { mark(); player()?.pauseVideo(); },
     // Right after a track starts, YouTube Music is still building its autoplay
     // list and Next is disabled; wait for it instead of silently doing nothing.
-    next() { mark(9000); clickWhenEnabled('ytmusic-player-bar .next-button'); },
-    prev() { mark(9000); clickWhenEnabled('ytmusic-player-bar .previous-button'); },
+    next() { mark(9000); wl.expect = { until: Date.now() + 30000 }; clickWhenEnabled('ytmusic-player-bar .next-button'); },
+    prev() { mark(9000); wl.expect = { until: Date.now() + 30000 }; clickWhenEnabled('ytmusic-player-bar .previous-button'); },
     seek(t) { mark(); player()?.seekTo(Math.max(0, +t || 0), true); pushSoon(); },
-    load(videoId) {
+    load(videoId, startAt) {
       if (!/^[\w-]{11}$/.test(videoId)) return false;
       mark(6000); wl.heldVid = null;
+      wl.expect = { id: videoId, until: Date.now() + 45000 };
+      wl.startAt = startAt > 0 ? { id: videoId, t: +startAt } : null;
       const before = videoData().video_id;
-      if (before === videoId) { player()?.seekTo(0, true); player()?.playVideo(); return true; }
+      if (before === videoId) { wl.expect = null; wl.startAt = null; player()?.seekTo(startAt > 0 ? +startAt : 0, true); player()?.playVideo(); return true; }
       if (!navigate({ watchEndpoint: { videoId } })) { location.href = '/watch?v=' + videoId; return true; }
       // Fallback: if the in-app navigation didn't take, do a real page load.
       setTimeout(() => { if (videoData().video_id !== videoId && !isAd()) location.href = '/watch?v=' + videoId; }, 8000);
@@ -455,6 +480,7 @@
     },
     setCfg(c) { Object.assign(cfg, c); if ('dataSaver' in c || 'videoFlip' in c) applySaver(true); if ('playLocal' in c && tap) tap.applyLocal(); pushSoon(); },
     state,
+    trackLog() { return wl.trackLog.slice(); },
   };
 
   // ------------------------------------------------------- InnerTube API
@@ -657,7 +683,215 @@
       const c = wl.ctx;
       return c && Date.now() - c.t < 15000 ? c.info : null;
     },
+
+    // ---- Full catalog pages (used by Wavelength for Android's own UI) ----
+    raw(endpoint, body) { return it(endpoint, body); },
+    // Shelves of items, like YouTube Music's Home.
+    async home() {
+      const j = await it('browse', { browseId: 'FEmusic_home' });
+      return { shelves: parseShelves(j), more: findContinuation(j) };
+    },
+    async homeMore(token) {
+      const j = await it('browse', { continuation: token });
+      return { shelves: parseShelves(j), more: findContinuation(j) };
+    },
+    // An album, playlist or artist page.
+    async page(browseId) {
+      const j = await it('browse', { browseId });
+      const header = parseHeader(j);
+      const shelves = parseShelves(j);
+      let tracks = [];
+      if (/^(MPRE|VL|LM|FE)/.test(browseId)) {
+        tracks = parseSongs(j);
+        if (header && header.art) for (const t of tracks) if (!t.art) t.art = header.art;
+      }
+      return { browseId, header, shelves: /^(MPRE|VL)/.test(browseId) ? shelves.filter((s) => !s.tracks) : shelves, tracks,
+        playlistId: findKey(j, 'audioPlaylistId') || (/^VL/.test(browseId) ? browseId.slice(2) : null), more: /^VL/.test(browseId) ? findContinuation(j) : null };
+    },
+    // Search results grouped like YouTube Music (top result, songs, albums…).
+    async searchAll(query) {
+      const j = await it('search', { query: String(query).slice(0, 200) });
+      const shelves = parseShelves(j);
+      // Results now come as one flat list; group them like the app does.
+      const out = [], loose = [];
+      for (const sh of shelves) (sh.loose ? loose.push(...sh.items) : out.push(sh));
+      const groups = [['Songs', (i) => i.type === 'song' && i.kind !== 'Video'], ['Videos', (i) => i.type === 'song' && i.kind === 'Video'],
+        ['Albums', (i) => i.type === 'album'], ['Artists', (i) => i.type === 'artist'], ['Playlists', (i) => i.type === 'playlist'],
+        ['Podcasts', (i) => i.type === 'podcast']];
+      for (const [title, f] of groups) {
+        const items = loose.filter(f);
+        if (items.length) out.push({ title, items });
+      }
+      return out;
+    },
+    async suggest(input) {
+      const j = await it('music/get_search_suggestions', { input: String(input).slice(0, 200) });
+      const words = [], items = [];
+      (function walk(o) {
+        if (!o || typeof o !== 'object') return;
+        if (o.searchSuggestionRenderer) { words.push(txt(o.searchSuggestionRenderer.suggestion)); return; }
+        if (o.musicResponsiveListItemRenderer) { const x = listItem(o.musicResponsiveListItemRenderer); if (x) items.push(x); return; }
+        for (const k in o) walk(o[k]);
+      })(j);
+      return { words: words.slice(0, 8), items: items.slice(0, 4) };
+    },
+    async lyrics(videoId) {
+      const n = await it('next', { videoId, isAudioOnly: true });
+      let id = null;
+      (function walk(o) {
+        if (id || !o || typeof o !== 'object') return;
+        const b = o.browseEndpoint && o.browseEndpoint.browseId;
+        if (b && /^MPLY/.test(b)) { id = b; return; }
+        for (const k in o) walk(o[k]);
+      })(n);
+      if (!id) return null;
+      const j = await it('browse', { browseId: id });
+      const d = findKey(j, 'musicDescriptionShelfRenderer');
+      return d ? { text: txt(d.description), source: txt(d.footer) } : null;
+    },
+    // Songs like this one (YouTube Music's "Start radio").
+    async radio(videoId) { return wl.api.playlist('RDAMVM' + videoId, 50); },
+    async addToPlaylist(playlistId, videoIds) {
+      if (!wl.api.signedIn()) throw new Error('Sign in to YouTube Music first');
+      await it('browse/edit_playlist', { playlistId: String(playlistId).replace(/^VL/, ''),
+        actions: [].concat(videoIds).map((v) => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: v, dedupeOption: 'DEDUPE_OPTION_SKIP' })) });
+      return true;
+    },
+    async rate(videoId, like) {
+      if (!wl.api.signedIn()) throw new Error('Sign in to YouTube Music first');
+      await it(like ? 'like/like' : 'like/removelike', { target: { videoId } });
+      return !!like;
+    },
+    async account() {
+      if (!wl.api.signedIn()) return null;
+      const j = await it('account/account_menu', {});
+      const h = findKey(j, 'activeAccountHeaderRenderer');
+      return h ? { name: txt(h.accountName), handle: txt(h.channelHandle), photo: (h.accountPhoto && h.accountPhoto.thumbnails || []).slice(-1)[0]?.url || null } : null;
+    },
   };
+
+  // ---- Generic page parsing: shelves of songs / albums / playlists / artists
+  const pageType = (nav) => nav?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType || '';
+  const anyThumb = (o) => { const t = findKey(o, 'thumbnails'); return Array.isArray(t) && t.length ? t[t.length - 1].url : null; };
+  function itemFromNav(nav, base) {
+    if (!nav) return null;
+    const w = nav.watchEndpoint;
+    if (w && w.videoId) {
+      const mvt = findKey(nav, 'musicVideoType');
+      return { ...base, type: 'song', videoId: w.videoId, kind: mvt && mvt !== 'MUSIC_VIDEO_TYPE_ATV' ? 'Video' : 'Song' };
+    }
+    if (nav.watchPlaylistEndpoint && nav.watchPlaylistEndpoint.playlistId) return { ...base, type: 'playlist', browseId: 'VL' + nav.watchPlaylistEndpoint.playlistId };
+    const b = nav.browseEndpoint;
+    if (!b || !b.browseId) return null;
+    const pt = pageType(nav);
+    const type = /ARTIST|USER_CHANNEL/.test(pt) || /^UC/.test(b.browseId) ? 'artist'
+      : /ALBUM|AUDIOBOOK/.test(pt) || /^MPRE/.test(b.browseId) ? 'album'
+        : /PODCAST|EPISODE/.test(pt) ? 'podcast' : /^FEmusic_moods|^FEmusic_/.test(b.browseId) ? 'category' : 'playlist';
+    return { ...base, type, browseId: b.browseId, params: b.params || undefined };
+  }
+  function artistFromSubtitle(s) {
+    const parts = String(s || '').split(' • ').map((x) => x.trim()).filter((x) => x && !KINDS.has(x) && !/views?$|plays?$|^\d{4}$/i.test(x));
+    return parts[0] || '';
+  }
+  function twoRow(r) {
+    const base = { title: txt(r.title), subtitle: txt(r.subtitle), art: thumb(r.thumbnailRenderer) || anyThumb(r.thumbnailRenderer) };
+    const x = itemFromNav(r.navigationEndpoint, base);
+    if (x && x.type === 'song') x.artist = artistFromSubtitle(base.subtitle);
+    return x;
+  }
+  function listItem(x) {
+    const s = songFromRow(x);
+    if (s) return { ...s, type: 'song', subtitle: [s.kind === 'Video' ? 'Video' : 'Song', s.artist].filter(Boolean).join(' • ') };
+    const flex = x.flexColumns || [];
+    const cols = flex.map((c) => txt(c.musicResponsiveListItemFlexColumnRenderer?.text));
+    const runs0 = flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+    const base = { title: cols[0] || '', subtitle: cols.slice(1).filter(Boolean).join(' • '), art: thumb(x.thumbnail) || anyThumb(x.thumbnail) };
+    return itemFromNav(x.navigationEndpoint || runs0[0]?.navigationEndpoint, base);
+  }
+  function cardItem(c) {
+    const nav = c.title?.runs?.[0]?.navigationEndpoint || c.onTap;
+    const base = { title: txt(c.title), subtitle: txt(c.subtitle), art: thumb(c.thumbnail) || anyThumb(c.thumbnail) };
+    const x = itemFromNav(nav, base);
+    if (x && x.type === 'song') x.artist = artistFromSubtitle(base.subtitle);
+    return x;
+  }
+  const moreId = (h) => {
+    const nav = h?.moreContentButton?.buttonRenderer?.navigationEndpoint || h?.title?.runs?.[0]?.navigationEndpoint;
+    return nav?.browseEndpoint?.browseId ? { browseId: nav.browseEndpoint.browseId, params: nav.browseEndpoint.params } : null;
+  };
+  function shelfItems(contents) {
+    return (contents || []).map((c) => (c.musicTwoRowItemRenderer ? twoRow(c.musicTwoRowItemRenderer)
+      : c.musicResponsiveListItemRenderer ? listItem(c.musicResponsiveListItemRenderer)
+        : c.musicMultiRowListItemRenderer ? itemFromNav(c.musicMultiRowListItemRenderer.onTap, { title: txt(c.musicMultiRowListItemRenderer.title), subtitle: txt(c.musicMultiRowListItemRenderer.subtitle), art: anyThumb(c.musicMultiRowListItemRenderer.thumbnail) })
+          : c.musicNavigationButtonRenderer ? itemFromNav(c.musicNavigationButtonRenderer.clickCommand, { title: txt(c.musicNavigationButtonRenderer.buttonText), subtitle: '', art: null, color: c.musicNavigationButtonRenderer.solid?.leftStripeColor })
+            : null)).filter(Boolean);
+  }
+  function parseShelves(json) {
+    const shelves = [];
+    const add = (title, items, extra = {}) => { if (items.length) shelves.push({ title: title || '', items, ...extra }); };
+    (function walk(o) {
+      if (!o || typeof o !== 'object') return;
+      if (o.musicCarouselShelfRenderer) {
+        const c = o.musicCarouselShelfRenderer, h = c.header?.musicCarouselShelfBasicHeaderRenderer;
+        add(txt(h?.title), shelfItems(c.contents), { strapline: txt(h?.strapline), more: moreId(h), carousel: true });
+        return;
+      }
+      if (o.musicShelfRenderer) {
+        const s = o.musicShelfRenderer;
+        const more = s.bottomEndpoint?.searchEndpoint ? { search: s.bottomEndpoint.searchEndpoint } : moreId(s);
+        add(txt(s.title), shelfItems(s.contents), { more });
+        return;
+      }
+      if (o.itemSectionRenderer && !findKey(o.itemSectionRenderer, 'musicShelfRenderer') && !findKey(o.itemSectionRenderer, 'musicCarouselShelfRenderer')) {
+        const items = shelfItems(o.itemSectionRenderer.contents);
+        if (items.length) {
+          const last = shelves[shelves.length - 1];
+          if (last && last.loose) last.items.push(...items); else shelves.push({ title: '', items, loose: true });
+          return;
+        }
+      }
+      if (o.musicPlaylistShelfRenderer) { add('', shelfItems(o.musicPlaylistShelfRenderer.contents), { tracks: true }); return; }
+      if (o.gridRenderer) { add(txt(o.gridRenderer.header?.gridHeaderRenderer?.title), shelfItems(o.gridRenderer.items), { grid: true }); return; }
+      if (o.musicCardShelfRenderer) {
+        const c = o.musicCardShelfRenderer, top = cardItem(c);
+        add(txt(c.header?.musicCardShelfHeaderBasicRenderer?.title) || 'Top result', [top, ...shelfItems(c.contents)].filter(Boolean), { top: true });
+        return;
+      }
+      if (o.musicDescriptionShelfRenderer) {
+        const d = o.musicDescriptionShelfRenderer;
+        shelves.push({ title: txt(d.header) || 'About', text: txt(d.description), items: [] });
+        return;
+      }
+      for (const k in o) walk(o[k]);
+    })(json);
+    return shelves;
+  }
+  function parseHeader(json) {
+    const h = findKey(json, 'musicResponsiveHeaderRenderer') || findKey(json, 'musicImmersiveHeaderRenderer')
+      || findKey(json, 'musicDetailHeaderRenderer') || findKey(json, 'musicVisualHeaderRenderer');
+    if (!h) return null;
+    let play = null, shuffle = null, radio = null;
+    (function walk(o) {
+      if (!o || typeof o !== 'object') return;
+      const w = o.watchPlaylistEndpoint || o.watchEndpoint;
+      if (w && w.playlistId) {
+        const p = w.params || '';
+        if (/RDAO|RDEM|radio/i.test(w.playlistId) || o.watchPlaylistEndpoint && /^RD/.test(w.playlistId)) radio = radio || w.playlistId;
+        else if (p === 'wAEB8gECKAE%3D' || /shuffle/i.test(JSON.stringify(o).slice(0, 200))) shuffle = shuffle || w.playlistId;
+        else play = play || w.playlistId;
+      }
+      for (const k in o) walk(o[k]);
+    })(h);
+    const desc = h.description?.musicDescriptionShelfRenderer?.description || h.description;
+    return {
+      title: txt(h.title),
+      subtitle: [txt(h.straplineTextOne), txt(h.subtitle), txt(h.secondSubtitle)].filter(Boolean).join(' • '),
+      description: txt(desc),
+      art: anyThumb(h.thumbnail) || anyThumb(h.foregroundThumbnail),
+      artist: !!findKey(json, 'musicImmersiveHeaderRenderer') || !!findKey(json, 'musicVisualHeaderRenderer'),
+      playlistId: play || shuffle || null, radioId: radio || null,
+    };
+  }
 
   // -------------------------------------------------- right-click = add
   // Right-clicking a song (or album / playlist card) adds it straight to

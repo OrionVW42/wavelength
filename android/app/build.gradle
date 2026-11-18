@@ -1,0 +1,60 @@
+plugins { id 'com.android.application' }
+
+// Release signing key lives outside the repo: %APPDATA%\Wavelength-android\
+// (signing.properties + wavelength-release.jks). Every future update must be
+// signed with this same key, so it has to be backed up.
+def signing = new Properties()
+def signingFile = new File(System.getenv('APPDATA') ?: '', 'Wavelength-android/signing.properties')
+if (signingFile.exists()) signingFile.withInputStream { signing.load(it) }
+
+android {
+  namespace 'io.github.orionvw42.wavelength'
+  compileSdk 36
+  buildToolsVersion '36.1.0'
+  defaultConfig {
+    applicationId 'io.github.orionvw42.wavelength'
+    minSdk 26
+    targetSdk 36
+    versionCode 3
+    versionName '0.3.0'
+    buildConfigField 'boolean', 'WEBVIEW_DEBUG', (project.hasProperty('wldebug') ? 'true' : 'false')
+  }
+  buildFeatures { buildConfig true }
+  sourceSets { main { assets.srcDirs += [layout.buildDirectory.dir('shared-assets').get().asFile] } }
+  signingConfigs {
+    release {
+      if (signingFile.exists()) {
+        storeFile new File(signingFile.parentFile, signing['storeFile'])
+        storePassword signing['storePassword']
+        keyAlias signing['keyAlias']
+        keyPassword signing['keyPassword']
+      }
+    }
+  }
+  buildTypes {
+    release { minifyEnabled false; signingConfig signingConfigs.release }
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation 'androidx.webkit:webkit:1.14.0'
+  implementation 'androidx.media:media:1.7.0'
+  implementation 'androidx.core:core:1.16.0'
+  implementation 'androidx.palette:palette:1.0.0'
+}
+
+// The engine and the room code are shared with the desktop app: copy them in
+// on every build so both always run the same code.
+def repo = rootProject.projectDir.parentFile
+tasks.register('copySharedAssets', Copy) {
+  into layout.buildDirectory.dir('shared-assets')
+  from(new File(repo, 'src/inject/bridge.js')) { into 'engine' }
+  from(new File(repo, 'src/renderer/shell')) { include 'session.js', 'relay.js'; into 'ui/shared' }
+  from(new File(repo, 'node_modules/peerjs/dist/peerjs.min.js')) { into 'ui/shared' }
+  from(new File(repo, 'node_modules/mqtt/dist/mqtt.min.js')) { into 'ui/shared' }
+}
+preBuild.dependsOn 'copySharedAssets'

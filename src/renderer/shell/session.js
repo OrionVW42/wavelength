@@ -73,7 +73,7 @@
         members: this.members.map((m) => ({ name: m.name, color: m.color })),
         next: this.queue[0] ? { title: this.queue[0].title, artist: this.queue[0].artist } : null,
         current: this.current ? { addedBy: this.current.addedBy, title: this.current.title, artist: this.current.artist } : null,
-        upNext: this.queue.slice(0, 25).map((t) => ({ uid: t.uid, videoId: t.videoId, title: t.title, artist: t.artist, duration: t.duration, by: t.addedBy ? t.addedBy.name : null })),
+        upNext: this.queue.slice(0, 25).map((t) => ({ uid: t.uid, videoId: t.videoId, title: t.title, artist: t.artist, art: t.art || null, duration: t.duration, by: t.addedBy ? t.addedBy.name : null })),
         queueLength: this.queue.length,
       };
     }
@@ -111,7 +111,7 @@
       if (this.pendingLoad) {
         if (s.videoId === this.pendingLoad.item.videoId) {
           this.pendingLoad = null; this.heldEnd = false;
-        } else if (now() - this.pendingLoad.at < 12000) {
+        } else if (now() - this.pendingLoad.at < 30000) {
           return; // still switching; ignore the outgoing track
         } else {
           this.pendingLoad = null;
@@ -151,6 +151,10 @@
         }
         return;
       }
+      if (type === 'track' && data && data.cause === 'glitch' && this.isAuthority) {
+        this._recoverGlitch(data);
+        return;
+      }
       if (type === 'track' && data && data.cause === 'auto' && this.isAuthority && this.queue.length && !this.pendingLoad) {
         // YouTube Music's autoplay slipped in before we could hold; take over.
         this.advance(0);
@@ -159,6 +163,31 @@
       if (this.role === 'guest' && this.sync && (type === 'user' || (type === 'track' && data.cause === 'user'))) {
         this._guestUserAction(type, data);
       }
+    }
+
+    // YouTube Music jumped to another song by itself (Android: its page is
+    // hidden, so nobody clicked anything). That's a playback error part way
+    // through a song: put the song back where it was. If the same song keeps
+    // failing, move on to OUR Up Next instead of YouTube Music's pick.
+    _recoverGlitch(data) {
+      if (this.pendingLoad && this.pendingLoad.item.videoId === data.videoId) return; // our own load, just slow
+      let item = null;
+      if (this.current && this.current.videoId === data.prev) item = this.current;
+      else {
+        const h = this.history[this.history.length - 1];
+        if (h && h.videoId === data.prev) item = h;
+      }
+      const ended = data.prevDur > 0 && data.prevPos > data.prevDur - 4;
+      const g = this._glitch && this._glitch.videoId === data.prev && now() - this._glitch.at < 5 * 60000 ? this._glitch : { videoId: data.prev, n: 0 };
+      g.n++; g.at = now(); this._glitch = g;
+      this.glitches = (this.glitches || 0) + 1;
+      if (item && !ended && g.n <= 2) {
+        if (this.history[this.history.length - 1] === item) this.history.pop();
+        this._load(item, Math.max(0, (data.prevPos || 0) - 1));
+        return;
+      }
+      if (this.queue.length) { this.advance(0); return; }
+      // Nothing of ours to play: let YouTube Music's choice stand.
     }
 
     // A guest touched YouTube Music's own controls while in sync.
@@ -284,11 +313,12 @@
       if (this.current) this._pushHistory(this.current);
       this._load(item);
     }
-    _load(item) {
+    _load(item, startAt = 0) {
       this.current = item;
       this.pendingLoad = { item, at: now() };
       this.heldEnd = false;
-      this.api.player('load', item.videoId);
+      if (startAt > 0) this.api.player('load', item.videoId, startAt);
+      else this.api.player('load', item.videoId);
       this.changed();
       if (this.role === 'host') {
         // Tell guests right away so they start loading in parallel.

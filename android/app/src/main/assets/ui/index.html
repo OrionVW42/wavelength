@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Wavelength</title>
+<link rel="stylesheet" href="app.css">
+<script>
+  // Keep timers alive in the background: the app calls __wlPump() every
+  // second while backgrounded and any overdue interval runs (never twice).
+  (() => {
+    const timers = new Map();
+    const origSI = window.setInterval.bind(window), origCI = window.clearInterval.bind(window);
+    window.setInterval = function (fn, delay, ...args) {
+      if (typeof fn !== 'function') return origSI(fn, delay, ...args);
+      const rec = { d: Math.max(4, +delay || 0), last: Date.now() };
+      rec.run = () => { rec.last = Date.now(); fn(...args); };
+      const id = origSI(rec.run, delay);
+      if (rec.d <= 10000) timers.set(id, rec);
+      return id;
+    };
+    window.clearInterval = (id) => { timers.delete(id); return origCI(id); };
+    window.__wlPump = () => { const now = Date.now(); for (const r of timers.values()) if (now - r.last >= r.d * 1.5) { try { r.run(); } catch (e) { console.error(e); } } };
+  })();
+</script>
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span id="logo"></span><span>Wavelength</span></div>
+    <button id="room-pill" class="room-pill" hidden></button>
+    <button class="icon-btn" id="top-search" aria-label="Search"></button>
+    <button class="avatar-btn" id="top-account" aria-label="Settings"></button>
+  </header>
+
+  <div id="banner" hidden></div>
+  <main id="view"></main>
+
+  <div id="mini" hidden>
+    <div class="mini-progress"><i></i></div>
+    <img class="mini-art" alt="">
+    <div class="mini-text"><div class="mini-title"></div><div class="mini-sub"></div></div>
+    <button class="icon-btn" id="mini-play" aria-label="Play"></button>
+    <button class="icon-btn" id="mini-next" aria-label="Next"></button>
+  </div>
+
+  <nav id="tabs">
+    <button data-tab="home"><i></i><span>Home</span></button>
+    <button data-tab="search"><i></i><span>Search</span></button>
+    <button data-tab="library"><i></i><span>Library</span></button>
+    <button data-tab="together"><i></i><span>Together</span></button>
+  </nav>
+
+  <!-- Now Playing -->
+  <section id="np" aria-hidden="true">
+    <div class="np-bg"></div>
+    <div class="np-top">
+      <button class="icon-btn" id="np-close" aria-label="Close"></button>
+      <div class="seg" id="np-seg"><button data-v="song" class="on">Song</button><button data-v="video">Video</button></div>
+      <button class="icon-btn" id="np-more" aria-label="More"></button>
+    </div>
+    <div class="np-art-wrap"><img id="np-art" alt=""><div id="np-video-hole"></div><div class="np-ad" id="np-ad" hidden>Ad · skipping</div></div>
+    <div class="np-meta">
+      <div class="np-titles"><div id="np-title"></div><div id="np-artist"></div></div>
+    </div>
+    <div class="np-actions">
+      <button class="chip" id="np-like"></button>
+      <button class="chip" id="np-save"></button>
+      <button class="chip" id="np-share"></button>
+      <button class="chip" id="np-radio"></button>
+    </div>
+    <div class="np-seek">
+      <input type="range" id="np-range" min="0" max="1000" value="0">
+      <div class="np-times"><span id="np-pos">0:00</span><span id="np-dur">0:00</span></div>
+    </div>
+    <div class="np-controls">
+      <button class="icon-btn" id="np-shuffle" aria-label="Shuffle Up Next"></button>
+      <button class="icon-btn big" id="np-prev" aria-label="Previous"></button>
+      <button class="play-btn" id="np-play" aria-label="Play"></button>
+      <button class="icon-btn big" id="np-next" aria-label="Next"></button>
+      <button class="icon-btn" id="np-room" aria-label="Listen together"></button>
+    </div>
+    <div class="np-tabs" id="np-tabs">
+      <button data-t="queue">Up next</button><button data-t="lyrics">Lyrics</button><button data-t="related">Related</button>
+    </div>
+    <div id="np-drawer">
+      <div class="drawer-head"><div class="grab"></div>
+        <div class="np-tabs inner"><button data-t="queue">Up next</button><button data-t="lyrics">Lyrics</button><button data-t="related">Related</button></div>
+      </div>
+      <div id="np-drawer-body"></div>
+    </div>
+  </section>
+
+  <div id="sheet-scrim" hidden></div>
+  <div id="sheet" hidden></div>
+  <div id="toast"></div>
+</div>
+<script src="shared/peerjs.min.js"></script>
+<script src="shared/mqtt.min.js"></script>
+<script src="shared/relay.js"></script>
+<script src="shared/session.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

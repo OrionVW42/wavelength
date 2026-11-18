@@ -1,0 +1,4 @@
+<resources>
+  <string name="app_name">Wavelength</string>
+  <string name="widget_desc">What\'s playing, with controls. Resize it from a small bar up to a full player with Up next.</string>
+</resources>
